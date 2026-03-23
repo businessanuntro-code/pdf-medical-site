@@ -1,4 +1,4 @@
-from flask import Flask, request, render_template_string, redirect, url_for
+from flask import Flask, request, render_template, redirect, url_for
 import fitz  # PyMuPDF
 import sqlite3
 import re
@@ -86,19 +86,7 @@ def home():
 
     conn.close()
 
-    return render_template_string("""
-    <h1>Articole Medicale</h1>
-
-    <a href='/upload'>+ Upload articol nou</a>
-
-    <ul>
-    {% for a in articole %}
-        <li>
-            <a href="/articol/{{a[1]}}">{{a[0]}}</a>
-        </li>
-    {% endfor %}
-    </ul>
-    """, articole=articole)
+    return render_template("home.html", articole=articole)
 
 @app.route("/upload", methods=["GET", "POST"])
 def upload():
@@ -127,17 +115,7 @@ def upload():
 
             return redirect(url_for('articol', slug=slug))
 
-    return render_template_string("""
-    <h1>Upload PDF</h1>
-
-    <form method="post" enctype="multipart/form-data">
-        <input type="file" name="pdf">
-        <button type="submit">Upload</button>
-    </form>
-
-    <br>
-    <a href="/">Înapoi</a>
-    """)
+    return render_template("upload.html")
 
 @app.route("/articol/<slug>")
 def articol(slug):
@@ -152,13 +130,21 @@ def articol(slug):
     if not articol:
         return "Articol inexistent"
 
-    return render_template_string("""
-    <a href="/">← Înapoi</a>
-    <h1>{{articol[0]}}</h1>
-    <div>
-        {{articol[1] | safe}}
-    </div>
-    """, articol=articol)
+    # Trimitem continutul articolului către template-ul nostru article.html
+    # Putem adăuga secțiuni suplimentare dacă vrei mai târziu
+    article_data = {
+        "title": articol[0],
+        "intro": "",
+        "sections": [
+            {
+                "subtitle": "",
+                "paragraphs": [articol[1]],
+                "list_items": None
+            }
+        ]
+    }
+
+    return render_template("article.html", article=article_data)
 
 # -------------------- RUN --------------------
 if __name__ == "__main__":
