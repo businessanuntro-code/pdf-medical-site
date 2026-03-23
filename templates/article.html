@@ -9,28 +9,29 @@
 <body>
     <article class="article-content">
         <!-- Titlu articol -->
-        <h1>{{ article.title }}</h1>
-
-        <!-- Introducere -->
-        <p>{{ article.intro }}</p>
+        <h1>{{ article.title | safe }}</h1>
 
         <!-- Secțiuni articol -->
-        {% if article.sections %}
-            {% for section in article.sections %}
-                <h2>{{ section.subtitle }}</h2>
-                {% for paragraph in section.paragraphs %}
-                    <p>{{ paragraph }}</p>
-                {% endfor %}
+        {% for section in article.sections %}
+            {% if section.subtitle %}
+                <h2>{{ section.subtitle | safe }}</h2>
+            {% endif %}
 
-                {% if section.list_items %}
-                    <ul>
-                        {% for item in section.list_items %}
-                            <li>{{ item }}</li>
-                        {% endfor %}
-                    </ul>
-                {% endif %}
+            {% for paragraph in section.paragraphs %}
+                <p>{{ paragraph | safe }}</p>
             {% endfor %}
-        {% endif %}
+
+            {% if section.list_items %}
+                <ul>
+                    {% for item in section.list_items %}
+                        <li>{{ item | safe }}</li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+        {% endfor %}
+
+        <br>
+        <a href="/">← Înapoi</a>
     </article>
 </body>
 </html>
