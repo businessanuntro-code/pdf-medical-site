@@ -1,7 +1,7 @@
-from flask import Flask, request, render_template_string, redirect, url_for
-import fitz  # PyMuPDF
+from flask import Flask, request, render_template, redirect, url_for
+import fitz
 import sqlite3
-import re
+import json
 import os
 from datetime import datetime
 
@@ -18,9 +18,15 @@ def init_db():
     CREATE TABLE IF NOT EXISTS articole (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         titlu TEXT,
-        slug TEXT UNIQUE,
-        continut_html TEXT,
-        created_at TEXT
+        slug TEXT,
+        continut_html TEXT
+    )
+    """)
+
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS templates (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        reguli TEXT
     )
     """)
 
@@ -29,238 +35,168 @@ def init_db():
 
 init_db()
 
-# -------------------- UTILS --------------------
-def slugify(text):
-    text = text.lower()
-    text = re.sub(r'[^a-z0-9]+', '-', text)
-    return text.strip('-')[:80]
-
-# 🔥 PARSER AVANSAT CU STRUCTURĂ + PARAGRAFE
-def extract_first_page_html(file_stream):
+# -------------------- PDF BLOCKS --------------------
+def extract_blocks(file_stream):
     doc = fitz.open(stream=file_stream.read(), filetype="pdf")
     page = doc[0]
 
-    blocks = page.get_text("dict")["blocks"]
+    blocks = []
+    raw_blocks = page.get_text("dict")["blocks"]
 
-    data = {
-        "title_ro": "",
-        "title_en": "",
-        "authors": "",
-        "abstract": {"text": "", "keywords": ""},
-        "rezumat": {"text": "", "keywords": ""},
-        "content": []
-    }
-
-    current_section = None
-    last_y = None
-
-    for block in blocks:
-        if "lines" not in block:
+    for b in raw_blocks:
+        if "lines" not in b:
             continue
 
-        x0, y0, x1, y1 = block["bbox"]
-
-        # ❌ ignoră header reviste
-        if y0 < 80:
-            continue
-
-        lines_text = []
+        text = ""
         size = 0
 
-        for line in block["lines"]:
-            line_text = ""
+        for line in b["lines"]:
             for span in line["spans"]:
-                line_text += span["text"]
+                text += span["text"] + " "
                 size = span["size"]
 
-            lines_text.append(line_text.strip())
+        text = text.strip()
 
-        text = " ".join(lines_text).strip()
+        if text:
+            blocks.append({
+                "text": text,
+                "size": size,
+                "x": b["bbox"][0],
+                "y": b["bbox"][1]
+            })
 
-        if not text:
-            continue
+    return blocks
 
-        # ❌ elimină junk
-        if any(x in text.lower() for x in [
-            "issn", "submission date", "acceptance date", "orl.ro"
-        ]):
-            continue
-
-        # ❌ elimină numere simple
-        if re.fullmatch(r"\d+", text):
-            continue
-
-        # ---------------- TITLU RO ----------------
-        if not data["title_ro"] and size > 16:
-            data["title_ro"] = text
-            continue
-
-        # ---------------- ABSTRACT ----------------
-        if "abstract" in text.lower():
-            current_section = "abstract"
-            continue
-
-        if current_section == "abstract":
-            if "cuvinte-cheie" in text.lower() or "keywords" in text.lower():
-                data["abstract"]["keywords"] = text
-            else:
-                data["abstract"]["text"] += text + "\n\n"
-            continue
-
-        # ---------------- REZUMAT ----------------
-        if "rezumat" in text.lower():
-            current_section = "rezumat"
-            continue
-
-        if current_section == "rezumat":
-            if "cuvinte-cheie" in text.lower():
-                data["rezumat"]["keywords"] = text
-            else:
-                data["rezumat"]["text"] += text + "\n\n"
-            continue
-
-        # ---------------- TITLU EN ----------------
-        if data["abstract"]["text"] and not data["title_en"] and size > 11:
-            data["title_en"] = text
-            continue
-
-        # ---------------- INTRODUCERE ----------------
-        if "introducere" in text.lower():
-            current_section = "content"
-            data["content"].append({"type": "h2", "text": text})
-            continue
-
-        # ---------------- CONTENT ----------------
-        if current_section == "content":
-            # separare paragraf după distanță verticală
-            if last_y and abs(y0 - last_y) > 25:
-                data["content"].append({"type": "p", "text": ""})
-
-            if size > 12:
-                data["content"].append({"type": "h3", "text": text})
-            else:
-                data["content"].append({"type": "p", "text": text})
-
-        last_y = y0
-
-    if not data["title_ro"]:
-        data["title_ro"] = "articol-fara-titlu"
-
-    # ---------------- HTML FINAL ----------------
+# -------------------- APPLY TEMPLATE --------------------
+def apply_template(blocks, template):
     html = ""
 
-    html += f"<h1>{data['title_ro']}</h1>"
+    for b in blocks:
+        role = template.get(str(b["id"]))
 
-    if data["title_en"]:
-        html += f"<p><em>{data['title_en']}</em></p>"
+        if role == "ignore":
+            continue
 
-    html += "<h2>Abstract</h2>"
-    html += f"<p>{data['abstract']['text'].replace(chr(10), '<br><br>')}</p>"
+        if role == "title_ro":
+            html += f"<h1>{b['text']}</h1>"
 
-    if data["abstract"]["keywords"]:
-        html += f"<p><strong>{data['abstract']['keywords']}</strong></p>"
+        elif role == "abstract_title":
+            html += f"<h2>{b['text']}</h2>"
 
-    html += "<h2>Rezumat</h2>"
-    html += f"<p>{data['rezumat']['text'].replace(chr(10), '<br><br>')}</p>"
+        elif role == "abstract_text":
+            html += f"<p>{b['text']}</p>"
 
-    if data["rezumat"]["keywords"]:
-        html += f"<p><strong>{data['rezumat']['keywords']}</strong></p>"
+        elif role == "title_en":
+            html += f"<p><em>{b['text']}</em></p>"
 
-    for block in data["content"]:
-        if block["type"] == "h2":
-            html += f"<h2>{block['text']}</h2>"
-        elif block["type"] == "h3":
-            html += f"<h3>{block['text']}</h3>"
+        elif role == "section":
+            html += f"<h2>{b['text']}</h2>"
+
         else:
-            if block["text"]:
-                html += f"<p>{block['text']}</p>"
+            html += f"<p>{b['text']}</p>"
 
-    return data["title_ro"], html
+    return html
 
 # -------------------- ROUTES --------------------
-@app.route("/", methods=["GET"])
+
+@app.route("/")
 def home():
     conn = sqlite3.connect("db.sqlite")
     cur = conn.cursor()
-
-    cur.execute("SELECT titlu, slug FROM articole ORDER BY id DESC")
+    cur.execute("SELECT titlu, slug FROM articole")
     articole = cur.fetchall()
-
     conn.close()
 
-    return render_template_string("""
-    <h1>Articole Medicale</h1>
+    return render_template("home.html", articole=articole)
 
-    <a href='/upload'>+ Upload articol nou</a>
-
-    <ul>
-    {% for a in articole %}
-        <li>
-            <a href="/articol/{{a[1]}}">{{a[0]}}</a>
-        </li>
-    {% endfor %}
-    </ul>
-    """, articole=articole)
 
 @app.route("/upload", methods=["GET", "POST"])
 def upload():
     if request.method == "POST":
         file = request.files["pdf"]
 
-        if file:
-            filepath = os.path.join(UPLOAD_FOLDER, file.filename)
-            file.save(filepath)
+        filepath = os.path.join(UPLOAD_FOLDER, file.filename)
+        file.save(filepath)
 
-            with open(filepath, "rb") as f:
-                titlu, html = extract_first_page_html(f)
+        with open(filepath, "rb") as f:
+            blocks = extract_blocks(f)
 
-            slug = slugify(titlu)
+        # atașăm ID pentru UI
+        for i, b in enumerate(blocks):
+            b["id"] = i
 
-            conn = sqlite3.connect("db.sqlite")
-            cur = conn.cursor()
+        # salvăm temporar
+        with open("last_blocks.json", "w") as f:
+            json.dump(blocks, f)
 
-            cur.execute(
-                "INSERT OR IGNORE INTO articole (titlu, slug, continut_html, created_at) VALUES (?, ?, ?, ?)",
-                (titlu, slug, html, datetime.now().isoformat())
-            )
+        return render_template("calibrate.html", blocks=blocks)
 
-            conn.commit()
-            conn.close()
+    return render_template("upload.html")
 
-            return redirect(url_for('articol', slug=slug))
 
-    return render_template_string("""
-    <h1>Upload PDF</h1>
+@app.route("/save_template", methods=["POST"])
+def save_template():
+    selections = request.form.to_dict()
 
-    <form method="post" enctype="multipart/form-data">
-        <input type="file" name="pdf">
-        <button type="submit">Upload</button>
-    </form>
+    template = {}
 
-    <br>
-    <a href="/">Înapoi</a>
-    """)
+    for key, value in selections.items():
+        template[key] = value
+
+    conn = sqlite3.connect("db.sqlite")
+    cur = conn.cursor()
+
+    cur.execute("DELETE FROM templates")  # păstrăm doar unul
+    cur.execute("INSERT INTO templates (reguli) VALUES (?)", (json.dumps(template),))
+
+    conn.commit()
+    conn.close()
+
+    return redirect("/generate")
+
+
+@app.route("/generate")
+def generate():
+    with open("last_blocks.json") as f:
+        blocks = json.load(f)
+
+    conn = sqlite3.connect("db.sqlite")
+    cur = conn.cursor()
+    cur.execute("SELECT reguli FROM templates ORDER BY id DESC LIMIT 1")
+    template = json.loads(cur.fetchone()[0])
+    conn.close()
+
+    html = apply_template(blocks, template)
+
+    titlu = "articol"
+    slug = str(int(datetime.now().timestamp()))
+
+    conn = sqlite3.connect("db.sqlite")
+    cur = conn.cursor()
+
+    cur.execute(
+        "INSERT INTO articole (titlu, slug, continut_html) VALUES (?, ?, ?)",
+        (titlu, slug, html)
+    )
+
+    conn.commit()
+    conn.close()
+
+    return redirect(f"/articol/{slug}")
+
 
 @app.route("/articol/<slug>")
 def articol(slug):
     conn = sqlite3.connect("db.sqlite")
     cur = conn.cursor()
 
-    cur.execute("SELECT titlu, continut_html FROM articole WHERE slug=?", (slug,))
+    cur.execute("SELECT continut_html FROM articole WHERE slug=?", (slug,))
     articol = cur.fetchone()
 
     conn.close()
 
-    if not articol:
-        return "Articol inexistent"
+    return render_template("article.html", content=articol[0])
 
-    return render_template_string("""
-    <a href="/">← Înapoi</a>
-    <h1>{{articol[0]}}</h1>
-    <div>
-        {{articol[1] | safe}}
-    </div>
-    """, articol=articol)
 
 # -------------------- RUN --------------------
 if __name__ == "__main__":
