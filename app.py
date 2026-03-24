@@ -35,13 +35,12 @@ def slugify(text):
     text = re.sub(r'[^a-z0-9]+', '-', text)
     return text.strip('-')[:80]
 
-# 🔥 PARSER AVANSAT
+# 🔥 PARSER AVANSAT CU STRUCTURĂ + PARAGRAFE
 def extract_first_page_html(file_stream):
     doc = fitz.open(stream=file_stream.read(), filetype="pdf")
     page = doc[0]
 
     blocks = page.get_text("dict")["blocks"]
-    page_width = page.rect.width
 
     data = {
         "title_ro": "",
@@ -53,6 +52,7 @@ def extract_first_page_html(file_stream):
     }
 
     current_section = None
+    last_y = None
 
     for block in blocks:
         if "lines" not in block:
@@ -60,24 +60,33 @@ def extract_first_page_html(file_stream):
 
         x0, y0, x1, y1 = block["bbox"]
 
-        # ❌ ignoră header
+        # ❌ ignoră header reviste
         if y0 < 80:
             continue
 
-        text = ""
+        lines_text = []
         size = 0
 
         for line in block["lines"]:
+            line_text = ""
             for span in line["spans"]:
-                text += span["text"] + " "
+                line_text += span["text"]
                 size = span["size"]
 
-        text = text.strip()
+            lines_text.append(line_text.strip())
+
+        text = " ".join(lines_text).strip()
 
         if not text:
             continue
 
-        # ❌ elimină numere
+        # ❌ elimină junk
+        if any(x in text.lower() for x in [
+            "issn", "submission date", "acceptance date", "orl.ro"
+        ]):
+            continue
+
+        # ❌ elimină numere simple
         if re.fullmatch(r"\d+", text):
             continue
 
@@ -86,21 +95,16 @@ def extract_first_page_html(file_stream):
             data["title_ro"] = text
             continue
 
-        # ---------------- AUTORI ----------------
-        if x0 < page_width * 0.3 and not data["authors"]:
-            data["authors"] += text + " "
-            continue
-
         # ---------------- ABSTRACT ----------------
         if "abstract" in text.lower():
             current_section = "abstract"
             continue
 
         if current_section == "abstract":
-            if "keywords" in text.lower():
+            if "cuvinte-cheie" in text.lower() or "keywords" in text.lower():
                 data["abstract"]["keywords"] = text
             else:
-                data["abstract"]["text"] += text + " "
+                data["abstract"]["text"] += text + "\n\n"
             continue
 
         # ---------------- REZUMAT ----------------
@@ -109,10 +113,10 @@ def extract_first_page_html(file_stream):
             continue
 
         if current_section == "rezumat":
-            if "cuvinte cheie" in text.lower():
+            if "cuvinte-cheie" in text.lower():
                 data["rezumat"]["keywords"] = text
             else:
-                data["rezumat"]["text"] += text + " "
+                data["rezumat"]["text"] += text + "\n\n"
             continue
 
         # ---------------- TITLU EN ----------------
@@ -120,17 +124,24 @@ def extract_first_page_html(file_stream):
             data["title_en"] = text
             continue
 
-        # ---------------- CONTENT ----------------
+        # ---------------- INTRODUCERE ----------------
         if "introducere" in text.lower():
             current_section = "content"
             data["content"].append({"type": "h2", "text": text})
             continue
 
+        # ---------------- CONTENT ----------------
         if current_section == "content":
+            # separare paragraf după distanță verticală
+            if last_y and abs(y0 - last_y) > 25:
+                data["content"].append({"type": "p", "text": ""})
+
             if size > 12:
                 data["content"].append({"type": "h3", "text": text})
             else:
                 data["content"].append({"type": "p", "text": text})
+
+        last_y = y0
 
     if not data["title_ro"]:
         data["title_ro"] = "articol-fara-titlu"
@@ -143,19 +154,14 @@ def extract_first_page_html(file_stream):
     if data["title_en"]:
         html += f"<p><em>{data['title_en']}</em></p>"
 
-    if data["authors"]:
-        html += f"<p><strong>{data['authors']}</strong></p>"
-
-    if data["abstract"]["text"]:
-        html += "<h2>Abstract</h2>"
-        html += f"<p>{data['abstract']['text']}</p>"
+    html += "<h2>Abstract</h2>"
+    html += f"<p>{data['abstract']['text'].replace(chr(10), '<br><br>')}</p>"
 
     if data["abstract"]["keywords"]:
         html += f"<p><strong>{data['abstract']['keywords']}</strong></p>"
 
-    if data["rezumat"]["text"]:
-        html += "<h2>Rezumat</h2>"
-        html += f"<p>{data['rezumat']['text']}</p>"
+    html += "<h2>Rezumat</h2>"
+    html += f"<p>{data['rezumat']['text'].replace(chr(10), '<br><br>')}</p>"
 
     if data["rezumat"]["keywords"]:
         html += f"<p><strong>{data['rezumat']['keywords']}</strong></p>"
@@ -166,7 +172,8 @@ def extract_first_page_html(file_stream):
         elif block["type"] == "h3":
             html += f"<h3>{block['text']}</h3>"
         else:
-            html += f"<p>{block['text']}</p>"
+            if block["text"]:
+                html += f"<p>{block['text']}</p>"
 
     return data["title_ro"], html
 
