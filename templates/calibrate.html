@@ -1,0 +1,21 @@
+<h1>Calibrare PDF</h1>
+
+<form method="post" action="/save_template">
+    {% for b in blocks %}
+        <div style="margin-bottom:15px; border:1px solid #ccc; padding:10px;">
+            <b>{{ b.text }}</b><br>
+
+            <select name="{{ b.id }}">
+                <option value="ignore">Ignore</option>
+                <option value="title_ro">Titlu RO</option>
+                <option value="abstract_title">Abstract / Rezumat</option>
+                <option value="abstract_text">Text Abstract</option>
+                <option value="title_en">Titlu EN</option>
+                <option value="section">Secțiune</option>
+                <option value="text">Text normal</option>
+            </select>
+        </div>
+    {% endfor %}
+
+    <button type="submit">Salvează Template</button>
+</form>
