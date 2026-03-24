@@ -1,21 +1,35 @@
-<h1>Calibrare PDF</h1>
+<h1>Calibrare Template</h1>
 
 <form method="post" action="/save_template">
-    {% for b in blocks %}
-        <div style="margin-bottom:15px; border:1px solid #ccc; padding:10px;">
-            <b>{{ b.text }}</b><br>
 
-            <select name="{{ b.id }}">
-                <option value="ignore">Ignore</option>
-                <option value="title_ro">Titlu RO</option>
-                <option value="abstract_title">Abstract / Rezumat</option>
-                <option value="abstract_text">Text Abstract</option>
-                <option value="title_en">Titlu EN</option>
-                <option value="section">Secțiune</option>
-                <option value="text">Text normal</option>
-            </select>
-        </div>
-    {% endfor %}
+{% for b in blocks %}
+<div style="border:1px solid #ccc; padding:10px; margin-bottom:10px;">
+    <b>{{ b.text }}</b><br><br>
 
-    <button type="submit">Salvează Template</button>
+    <select name="{{ b.id }}">
+        <option value="ignore">Ignore</option>
+
+        <option value="title_ro">Titlu RO</option>
+        <option value="title_en">Titlu EN</option>
+        <option value="autori">Autori</option>
+
+        <option value="abstract">Abstract</option>
+        <option value="abstract_text">Text Abstract</option>
+
+        <option value="keywords">Keywords</option>
+        <option value="keywords_list">Keywords separate prin virgula</option>
+
+        <option value="rezumat">Rezumat</option>
+        <option value="rezumat_text">Text Rezumat</option>
+
+        <option value="cuvinte_cheie">Cuvinte Cheie</option>
+        <option value="cuvinte_cheie_list">Cuvinte Cheie separate prin virgula</option>
+
+        <option value="text">Text</option>
+    </select>
+</div>
+{% endfor %}
+
+<button type="submit">Salvează Template</button>
+
 </form>
