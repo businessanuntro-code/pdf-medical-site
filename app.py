@@ -35,17 +35,33 @@ def slugify(text):
     text = re.sub(r'[^a-z0-9]+', '-', text)
     return text.strip('-')[:80]
 
+# 🔥 PARSER AVANSAT
 def extract_first_page_html(file_stream):
     doc = fitz.open(stream=file_stream.read(), filetype="pdf")
     page = doc[0]
 
     blocks = page.get_text("dict")["blocks"]
+    page_width = page.rect.width
 
-    html = ""
-    title = None
+    data = {
+        "title_ro": "",
+        "title_en": "",
+        "authors": "",
+        "abstract": {"text": "", "keywords": ""},
+        "rezumat": {"text": "", "keywords": ""},
+        "content": []
+    }
+
+    current_section = None
 
     for block in blocks:
         if "lines" not in block:
+            continue
+
+        x0, y0, x1, y1 = block["bbox"]
+
+        # ❌ ignoră header
+        if y0 < 80:
             continue
 
         text = ""
@@ -57,23 +73,102 @@ def extract_first_page_html(file_stream):
                 size = span["size"]
 
         text = text.strip()
+
         if not text:
             continue
 
-        if size > 14 and not title:
-            title = text
-            html += f"<h1>{text}</h1>"
-        elif "abstract" in text.lower():
-            html += f"<h2>{text}</h2>"
-        elif size > 11:
-            html += f"<h3>{text}</h3>"
+        # ❌ elimină numere
+        if re.fullmatch(r"\d+", text):
+            continue
+
+        # ---------------- TITLU RO ----------------
+        if not data["title_ro"] and size > 16:
+            data["title_ro"] = text
+            continue
+
+        # ---------------- AUTORI ----------------
+        if x0 < page_width * 0.3 and not data["authors"]:
+            data["authors"] += text + " "
+            continue
+
+        # ---------------- ABSTRACT ----------------
+        if "abstract" in text.lower():
+            current_section = "abstract"
+            continue
+
+        if current_section == "abstract":
+            if "keywords" in text.lower():
+                data["abstract"]["keywords"] = text
+            else:
+                data["abstract"]["text"] += text + " "
+            continue
+
+        # ---------------- REZUMAT ----------------
+        if "rezumat" in text.lower():
+            current_section = "rezumat"
+            continue
+
+        if current_section == "rezumat":
+            if "cuvinte cheie" in text.lower():
+                data["rezumat"]["keywords"] = text
+            else:
+                data["rezumat"]["text"] += text + " "
+            continue
+
+        # ---------------- TITLU EN ----------------
+        if data["abstract"]["text"] and not data["title_en"] and size > 11:
+            data["title_en"] = text
+            continue
+
+        # ---------------- CONTENT ----------------
+        if "introducere" in text.lower():
+            current_section = "content"
+            data["content"].append({"type": "h2", "text": text})
+            continue
+
+        if current_section == "content":
+            if size > 12:
+                data["content"].append({"type": "h3", "text": text})
+            else:
+                data["content"].append({"type": "p", "text": text})
+
+    if not data["title_ro"]:
+        data["title_ro"] = "articol-fara-titlu"
+
+    # ---------------- HTML FINAL ----------------
+    html = ""
+
+    html += f"<h1>{data['title_ro']}</h1>"
+
+    if data["title_en"]:
+        html += f"<p><em>{data['title_en']}</em></p>"
+
+    if data["authors"]:
+        html += f"<p><strong>{data['authors']}</strong></p>"
+
+    if data["abstract"]["text"]:
+        html += "<h2>Abstract</h2>"
+        html += f"<p>{data['abstract']['text']}</p>"
+
+    if data["abstract"]["keywords"]:
+        html += f"<p><strong>{data['abstract']['keywords']}</strong></p>"
+
+    if data["rezumat"]["text"]:
+        html += "<h2>Rezumat</h2>"
+        html += f"<p>{data['rezumat']['text']}</p>"
+
+    if data["rezumat"]["keywords"]:
+        html += f"<p><strong>{data['rezumat']['keywords']}</strong></p>"
+
+    for block in data["content"]:
+        if block["type"] == "h2":
+            html += f"<h2>{block['text']}</h2>"
+        elif block["type"] == "h3":
+            html += f"<h3>{block['text']}</h3>"
         else:
-            html += f"<p>{text}</p>"
+            html += f"<p>{block['text']}</p>"
 
-    if not title:
-        title = "articol-fara-titlu"
-
-    return title, html
+    return data["title_ro"], html
 
 # -------------------- ROUTES --------------------
 @app.route("/", methods=["GET"])
