@@ -42,38 +42,116 @@ def extract_first_page_html(file_stream):
     blocks = page.get_text("dict")["blocks"]
 
     html = ""
-    title = None
+    title_ro = None
+    title_en = None
+    seen_abstract = False
+    seen_intro = False
+
+    page_width = page.rect.width
 
     for block in blocks:
         if "lines" not in block:
             continue
 
+        x0, y0, x1, y1 = block["bbox"]
+
+        # ❌ IGNORĂ HEADER (sus)
+        if y0 < 80:
+            continue
+
+        # ❌ IGNORĂ COLOANA STÂNGA (autori)
+        if x0 < page_width * 0.2:
+            continue
+
         text = ""
         size = 0
+        is_bold = False
+        is_italic = False
+        is_sup = False
 
         for line in block["lines"]:
             for span in line["spans"]:
-                text += span["text"] + " "
+                t = span["text"]
+
+                font = span.get("font", "").lower()
+
+                if "bold" in font:
+                    is_bold = True
+                if "italic" in font or "oblique" in font:
+                    is_italic = True
+
+                if span.get("flags", 0) & 1:
+                    is_sup = True
+
                 size = span["size"]
+                text += t + " "
 
         text = text.strip()
+
+        # ❌ elimină numere izolate
+        if re.fullmatch(r"\d+", text):
+            continue
+
         if not text:
             continue
 
-        if size > 14 and not title:
-            title = text
-            html += f"<h1>{text}</h1>"
-        elif "abstract" in text.lower():
-            html += f"<h2>{text}</h2>"
-        elif size > 11:
-            html += f"<h3>{text}</h3>"
+        # -------------------------
+        # 1️⃣ TITLU ROMÂNĂ
+        # -------------------------
+        if not title_ro and size > 16:
+            title_ro = text
+            html += f"<h1 style='text-align:left'>{text}</h1>"
+            continue
+
+        # -------------------------
+        # 2️⃣ ABSTRACT / REZUMAT
+        # -------------------------
+        if "abstract" in text.lower() or "rezumat" in text.lower():
+            seen_abstract = True
+            html += f"<h2 style='text-align:left'>{text}</h2>"
+            continue
+
+        if seen_abstract and not title_en:
+            html += f"<p style='text-align:left'>{text}</p>"
+            continue
+
+        # -------------------------
+        # 3️⃣ TITLU ENGLEZĂ (italic)
+        # -------------------------
+        if seen_abstract and not title_en and size > 11:
+            title_en = text
+            html += f"<p style='text-align:left'><em>{text}</em></p>"
+            continue
+
+        # -------------------------
+        # 4️⃣ INTRODUCERE
+        # -------------------------
+        if "introducere" in text.lower():
+            seen_intro = True
+            html += f"<h2 style='text-align:left'>{text}</h2>"
+            continue
+
+        # -------------------------
+        # 5️⃣ CONȚINUT
+        # -------------------------
+        formatted_text = text
+
+        if is_bold:
+            formatted_text = f"<strong>{formatted_text}</strong>"
+        if is_italic:
+            formatted_text = f"<em>{formatted_text}</em>"
+        if is_sup:
+            formatted_text = f"<sup>{formatted_text}</sup>"
+
+        if size > 12:
+            html += f"<h3 style='text-align:left'>{formatted_text}</h3>"
         else:
-            html += f"<p>{text}</p>"
+            html += f"<p style='text-align:left'>{formatted_text}</p>"
 
-    if not title:
-        title = "articol-fara-titlu"
+    if not title_ro:
+        title_ro = "articol-fara-titlu"
 
-    return title, html
+    return title_ro, html
 
 # -------------------- ROUTES --------------------
 @app.route("/", methods=["GET"])
@@ -130,8 +208,6 @@ def articol(slug):
     if not articol:
         return "Articol inexistent"
 
-    # Trimitem continutul articolului către template-ul nostru article.html
-    # Putem adăuga secțiuni suplimentare dacă vrei mai târziu
     article_data = {
         "title": articol[0],
         "intro": "",
