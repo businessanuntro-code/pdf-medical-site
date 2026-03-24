@@ -59,6 +59,7 @@ def extract_blocks(file_stream):
 
         if text:
             blocks.append({
+                "id": len(blocks),
                 "text": text,
                 "size": size,
                 "x": b["bbox"][0],
@@ -69,7 +70,20 @@ def extract_blocks(file_stream):
 
 # -------------------- APPLY TEMPLATE --------------------
 def apply_template(blocks, template):
-    html = ""
+    sections = {
+        "title_ro": "",
+        "title_en": "",
+        "autori": "",
+        "abstract": "",
+        "abstract_text": "",
+        "keywords": "",
+        "keywords_list": "",
+        "rezumat": "",
+        "rezumat_text": "",
+        "cuvinte_cheie": "",
+        "cuvinte_cheie_list": "",
+        "text": []
+    }
 
     for b in blocks:
         role = template.get(str(b["id"]))
@@ -78,32 +92,71 @@ def apply_template(blocks, template):
             continue
 
         if role == "title_ro":
-            html += f"<h1>{b['text']}</h1>"
-
-        elif role == "abstract_title":
-            html += f"<h2>{b['text']}</h2>"
-
-        elif role == "abstract_text":
-            html += f"<p>{b['text']}</p>"
+            sections["title_ro"] = b["text"]
 
         elif role == "title_en":
-            html += f"<p><em>{b['text']}</em></p>"
+            sections["title_en"] = b["text"]
 
-        elif role == "section":
-            html += f"<h2>{b['text']}</h2>"
+        elif role == "autori":
+            sections["autori"] += b["text"] + " "
+
+        elif role == "abstract":
+            sections["abstract"] = b["text"]
+
+        elif role == "abstract_text":
+            sections["abstract_text"] += b["text"] + " "
+
+        elif role == "keywords":
+            sections["keywords"] = b["text"]
+
+        elif role == "keywords_list":
+            sections["keywords_list"] = b["text"]
+
+        elif role == "rezumat":
+            sections["rezumat"] = b["text"]
+
+        elif role == "rezumat_text":
+            sections["rezumat_text"] += b["text"] + " "
+
+        elif role == "cuvinte_cheie":
+            sections["cuvinte_cheie"] = b["text"]
+
+        elif role == "cuvinte_cheie_list":
+            sections["cuvinte_cheie_list"] = b["text"]
 
         else:
-            html += f"<p>{b['text']}</p>"
+            sections["text"].append(b["text"])
+
+    # 🔥 HTML FINAL ORDONAT (MODEL MEDICHUB)
+    html = f"""
+    <h1>{sections['title_ro']}</h1>
+    <p><em>{sections['title_en']}</em></p>
+
+    <p><strong>{sections['autori']}</strong></p>
+
+    <h2>{sections['abstract']}</h2>
+    <p>{sections['abstract_text']}</p>
+
+    <p><strong>{sections['keywords']}</strong>: {sections['keywords_list']}</p>
+
+    <h2>{sections['rezumat']}</h2>
+    <p>{sections['rezumat_text']}</p>
+
+    <p><strong>{sections['cuvinte_cheie']}</strong>: {sections['cuvinte_cheie_list']}</p>
+    """
+
+    for t in sections["text"]:
+        html += f"<p>{t}</p>"
 
     return html
 
-# -------------------- ROUTES --------------------
 
+# -------------------- ROUTES --------------------
 @app.route("/")
 def home():
     conn = sqlite3.connect("db.sqlite")
     cur = conn.cursor()
-    cur.execute("SELECT titlu, slug FROM articole")
+    cur.execute("SELECT titlu, slug FROM articole ORDER BY id DESC")
     articole = cur.fetchall()
     conn.close()
 
@@ -121,11 +174,6 @@ def upload():
         with open(filepath, "rb") as f:
             blocks = extract_blocks(f)
 
-        # atașăm ID pentru UI
-        for i, b in enumerate(blocks):
-            b["id"] = i
-
-        # salvăm temporar
         with open("last_blocks.json", "w") as f:
             json.dump(blocks, f)
 
@@ -138,16 +186,11 @@ def upload():
 def save_template():
     selections = request.form.to_dict()
 
-    template = {}
-
-    for key, value in selections.items():
-        template[key] = value
-
     conn = sqlite3.connect("db.sqlite")
     cur = conn.cursor()
 
-    cur.execute("DELETE FROM templates")  # păstrăm doar unul
-    cur.execute("INSERT INTO templates (reguli) VALUES (?)", (json.dumps(template),))
+    cur.execute("DELETE FROM templates")
+    cur.execute("INSERT INTO templates (reguli) VALUES (?)", (json.dumps(selections),))
 
     conn.commit()
     conn.close()
@@ -168,7 +211,6 @@ def generate():
 
     html = apply_template(blocks, template)
 
-    titlu = "articol"
     slug = str(int(datetime.now().timestamp()))
 
     conn = sqlite3.connect("db.sqlite")
@@ -176,7 +218,7 @@ def generate():
 
     cur.execute(
         "INSERT INTO articole (titlu, slug, continut_html) VALUES (?, ?, ?)",
-        (titlu, slug, html)
+        ("articol", slug, html)
     )
 
     conn.commit()
