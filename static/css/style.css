@@ -1,33 +1,18 @@
-/* Stil general articol */
-.article-content {
-    max-width: 800px;        /* Lățime optimă pentru citire */
-    margin: 0 auto;          /* Centrare pe pagină */
-    line-height: 1.6;        /* Spațiu între rânduri */
-    font-family: Arial, sans-serif;
-    padding: 20px;
+.article {
+    max-width: 800px;
+    margin: auto;
+    font-family: Arial;
+    line-height: 1.6;
 }
 
-/* Titlu principal */
-.article-content h1 {
-    font-size: 2em;
-    text-align: center;
-    margin-bottom: 0.5em;
+h1 {
+    font-size: 28px;
 }
 
-/* Subtitluri secțiuni */
-.article-content h2 {
-    font-size: 1.5em;
-    margin-top: 1.5em;
-    margin-bottom: 0.5em;
+h2 {
+    margin-top: 20px;
 }
 
-/* Paragrafe */
-.article-content p {
-    margin-bottom: 1em;
-}
-
-/* Liste */
-.article-content ul, .article-content ol {
-    margin-left: 20px;
-    margin-bottom: 1em;
+p {
+    margin-bottom: 10px;
 }
