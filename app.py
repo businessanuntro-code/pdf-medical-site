@@ -1,4 +1,4 @@
-from flask import Flask, request, render_template, redirect, url_for
+from flask import Flask, request, render_template_string, redirect, url_for
 import fitz  # PyMuPDF
 import sqlite3
 import re
@@ -42,116 +42,38 @@ def extract_first_page_html(file_stream):
     blocks = page.get_text("dict")["blocks"]
 
     html = ""
-    title_ro = None
-    title_en = None
-    seen_abstract = False
-    seen_intro = False
-
-    page_width = page.rect.width
+    title = None
 
     for block in blocks:
         if "lines" not in block:
             continue
 
-        x0, y0, x1, y1 = block["bbox"]
-
-        # ❌ IGNORĂ HEADER (sus)
-        if y0 < 80:
-            continue
-
-        # ❌ IGNORĂ COLOANA STÂNGA (autori)
-        if x0 < page_width * 0.2:
-            continue
-
         text = ""
         size = 0
-        is_bold = False
-        is_italic = False
-        is_sup = False
 
         for line in block["lines"]:
             for span in line["spans"]:
-                t = span["text"]
-
-                font = span.get("font", "").lower()
-
-                if "bold" in font:
-                    is_bold = True
-                if "italic" in font or "oblique" in font:
-                    is_italic = True
-
-                if span.get("flags", 0) & 1:
-                    is_sup = True
-
+                text += span["text"] + " "
                 size = span["size"]
-                text += t + " "
 
         text = text.strip()
-
-        # ❌ elimină numere izolate
-        if re.fullmatch(r"\d+", text):
-            continue
-
         if not text:
             continue
 
-        # -------------------------
-        # 1️⃣ TITLU ROMÂNĂ
-        # -------------------------
-        if not title_ro and size > 16:
-            title_ro = text
-            html += f"<h1 style='text-align:left'>{text}</h1>"
-            continue
-
-        # -------------------------
-        # 2️⃣ ABSTRACT / REZUMAT
-        # -------------------------
-        if "abstract" in text.lower() or "rezumat" in text.lower():
-            seen_abstract = True
-            html += f"<h2 style='text-align:left'>{text}</h2>"
-            continue
-
-        if seen_abstract and not title_en:
-            html += f"<p style='text-align:left'>{text}</p>"
-            continue
-
-        # -------------------------
-        # 3️⃣ TITLU ENGLEZĂ (italic)
-        # -------------------------
-        if seen_abstract and not title_en and size > 11:
-            title_en = text
-            html += f"<p style='text-align:left'><em>{text}</em></p>"
-            continue
-
-        # -------------------------
-        # 4️⃣ INTRODUCERE
-        # -------------------------
-        if "introducere" in text.lower():
-            seen_intro = True
-            html += f"<h2 style='text-align:left'>{text}</h2>"
-            continue
-
-        # -------------------------
-        # 5️⃣ CONȚINUT
-        # -------------------------
-        formatted_text = text
-
-        if is_bold:
-            formatted_text = f"<strong>{formatted_text}</strong>"
-        if is_italic:
-            formatted_text = f"<em>{formatted_text}</em>"
-        if is_sup:
-            formatted_text = f"<sup>{formatted_text}</sup>"
-
-        if size > 12:
-            html += f"<h3 style='text-align:left'>{formatted_text}</h3>"
+        if size > 14 and not title:
+            title = text
+            html += f"<h1>{text}</h1>"
+        elif "abstract" in text.lower():
+            html += f"<h2>{text}</h2>"
+        elif size > 11:
+            html += f"<h3>{text}</h3>"
         else:
-            html += f"<p style='text-align:left'>{formatted_text}</p>"
+            html += f"<p>{text}</p>"
 
-    if not title_ro:
-        title_ro = "articol-fara-titlu"
+    if not title:
+        title = "articol-fara-titlu"
 
-    return title_ro, html
+    return title, html
 
 # -------------------- ROUTES --------------------
 @app.route("/", methods=["GET"])
@@ -164,7 +86,19 @@ def home():
 
     conn.close()
 
-    return render_template("home.html", articole=articole)
+    return render_template_string("""
+    <h1>Articole Medicale</h1>
+
+    <a href='/upload'>+ Upload articol nou</a>
+
+    <ul>
+    {% for a in articole %}
+        <li>
+            <a href="/articol/{{a[1]}}">{{a[0]}}</a>
+        </li>
+    {% endfor %}
+    </ul>
+    """, articole=articole)
 
 @app.route("/upload", methods=["GET", "POST"])
 def upload():
@@ -193,7 +127,17 @@ def upload():
 
             return redirect(url_for('articol', slug=slug))
 
-    return render_template("upload.html")
+    return render_template_string("""
+    <h1>Upload PDF</h1>
+
+    <form method="post" enctype="multipart/form-data">
+        <input type="file" name="pdf">
+        <button type="submit">Upload</button>
+    </form>
+
+    <br>
+    <a href="/">Înapoi</a>
+    """)
 
 @app.route("/articol/<slug>")
 def articol(slug):
@@ -208,19 +152,13 @@ def articol(slug):
     if not articol:
         return "Articol inexistent"
 
-    article_data = {
-        "title": articol[0],
-        "intro": "",
-        "sections": [
-            {
-                "subtitle": "",
-                "paragraphs": [articol[1]],
-                "list_items": None
-            }
-        ]
-    }
-
-    return render_template("article.html", article=article_data)
+    return render_template_string("""
+    <a href="/">← Înapoi</a>
+    <h1>{{articol[0]}}</h1>
+    <div>
+        {{articol[1] | safe}}
+    </div>
+    """, articol=articol)
 
 # -------------------- RUN --------------------
 if __name__ == "__main__":
