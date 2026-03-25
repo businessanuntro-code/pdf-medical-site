@@ -88,12 +88,11 @@ function addBlock(text){
 // Sterge bloc
 function deleteBlock(btn){
     let block = btn.parentElement;
-    // Sterge Quill din array
     quills = quills.filter(q => !block.contains(document.getElementById(q.id)));
     block.remove();
 }
 
-// Salvare articole
+// Salvare articole (deschide articolul generat într-un tab nou)
 function save(){
     let data = [];
     quills.forEach(q=>{
@@ -103,7 +102,8 @@ function save(){
 
     let form = document.createElement("form");
     form.method = "POST";
-    form.action = "/save";
+    form.action = "/save";  // Endpoint backend
+    form.target = "_blank";  // <--- deschide într-un tab nou
 
     let input = document.createElement("input");
     input.type = "hidden";
