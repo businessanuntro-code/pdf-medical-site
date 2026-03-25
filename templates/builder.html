@@ -20,7 +20,6 @@ body { margin:0; font-family: Georgia, serif; background:#f5f5f5; color:#222; }
 <body>
 
 <div class="editor-layout">
-
     <div class="sidebar">
         <h3>Blocuri articol</h3>
         {% for key, val in blocks[0].items() %}
@@ -34,19 +33,16 @@ body { margin:0; font-family: Georgia, serif; background:#f5f5f5; color:#222; }
         <br>
         <button onclick="save()">💾 Save</button>
     </div>
-
 </div>
 
 <script>
 let dropzone = document.getElementById("dropzone");
 let quills = [];
-
 new Sortable(dropzone, { animation:150 });
 
 function addBlock(text,key){
     let div = document.createElement("div");
     div.className = "block";
-
     let editorId = 'editor-' + Date.now();
     div.innerHTML = `
         <button class="delete-btn" onclick="deleteBlock(this)">X</button>
@@ -59,7 +55,6 @@ function addBlock(text,key){
         theme:'snow',
         modules:{ toolbar: [['bold','italic','underline',{ 'script':'super'}], [{ 'color': []}], [{ 'indent':'-1'},{'indent':'+1'}], ['clean']] }
     });
-
     quill.root.innerHTML = text;
     quills.push({id:editorId, quill:quill});
 }
@@ -75,17 +70,14 @@ function save(){
     quills.forEach(q=>{
         data.push({html:q.quill.root.innerHTML});
     });
-
     let form = document.createElement("form");
     form.method = "POST";
     form.action = "/save";
     form.target = "_blank";
-
     let input = document.createElement("input");
     input.type = "hidden";
     input.name = "data";
     input.value = JSON.stringify(data);
-
     form.appendChild(input);
     document.body.appendChild(form);
     form.submit();
