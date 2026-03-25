@@ -5,42 +5,75 @@
 
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 
-<link rel="stylesheet" href="/static/style.css">
+<style>
+body {
+    display:flex;
+    font-family:Arial;
+}
 
+#sidebar {
+    width:30%;
+    border-right:1px solid #ccc;
+    padding:10px;
+}
+
+#canvas {
+    width:70%;
+    padding:20px;
+}
+
+.block {
+    border:1px solid #aaa;
+    padding:10px;
+    margin-bottom:10px;
+    background:#fff;
+    cursor:move;
+}
+
+.editor {
+    border:1px solid #ddd;
+    padding:5px;
+    min-height:30px;
+}
+
+.toolbar button {
+    margin-right:5px;
+}
+</style>
 </head>
 
 <body>
 
-<div class="editor-layout">
-
 <!-- SIDEBAR -->
-<div class="sidebar">
+<div id="sidebar">
     <h3>Blocuri PDF</h3>
 
     {% for b in blocks %}
-    <div class="sidebar-block" onclick="addBlock('{{b.text|safe}}')">
+    <div class="block" onclick="addBlock('{{b.text|safe}}')">
         {{ b.text[:100] }}
     </div>
     {% endfor %}
 </div>
 
 <!-- CANVAS -->
-<div class="canvas">
+<div id="canvas">
 
-<div class="topbar">
-    <button onclick="save()">💾 Salvează</button>
-</div>
+<h2>Editor (drag & drop)</h2>
 
 <div id="dropzone"></div>
 
-</div>
+<br>
+<button onclick="save()">💾 Save</button>
 
 </div>
 
 <script>
 let dropzone = document.getElementById("dropzone");
 
-new Sortable(dropzone, { animation: 150 });
+// drag sort
+new Sortable(dropzone, {
+    animation: 150
+});
 
 function addBlock(text) {
     let div = document.createElement("div");
@@ -59,16 +92,17 @@ function addBlock(text) {
     dropzone.appendChild(div);
 }
 
-function cmd(e, c) {
+function cmd(e, command) {
     e.preventDefault();
-    document.execCommand(c);
+    document.execCommand(command);
 }
 
 function save() {
     let data = [];
 
-    document.querySelectorAll(".editor").forEach(e => {
-        data.push({html: e.innerHTML});
+    document.querySelectorAll("#dropzone .block").forEach(b => {
+        let html = b.querySelector(".editor").innerHTML;
+        data.push({html: html});
     });
 
     let form = document.createElement("form");
