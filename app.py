@@ -13,7 +13,6 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 def init_db():
     conn = sqlite3.connect("db.sqlite")
     cur = conn.cursor()
-
     cur.execute("""
     CREATE TABLE IF NOT EXISTS articole (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -21,7 +20,6 @@ def init_db():
         continut_json TEXT
     )
     """)
-
     conn.commit()
     conn.close()
 
@@ -42,55 +40,59 @@ def extract_medical_article(file_stream):
         "bibliografie": ""
     }
 
-    # Patterns pentru secțiuni
-    import re
     patterns = {
-        "abstract": re.compile(r"\babstract\b", re.IGNORECASE),
-        "keywords": re.compile(r"\bkeywords\b", re.IGNORECASE),
-        "rezumat": re.compile(r"\brezumat\b", re.IGNORECASE),
-        "cuvinte_cheie": re.compile(r"\bcuvinte[- ]cheie\b", re.IGNORECASE),
-        "bibliografie": re.compile(r"\b(bibliografie|references|literatura)\b", re.IGNORECASE)
+        "abstract": ["abstract"],
+        "keywords": ["keywords"],
+        "rezumat": ["rezumat"],
+        "cuvinte_cheie": ["cuvinte cheie", "cuvinte-cheie"],
+        "bibliografie": ["bibliografie", "references", "literatura"]
     }
 
-    full_text = ""
+    all_blocks = []
     for page in doc:
-        full_text += page.get_text("text") + "\n"
+        blocks = page.get_text("blocks")  # fiecare bloc: (x0, y0, x1, y1, text, block_type)
+        all_blocks.extend(blocks)
 
-    lines = full_text.split("\n")
-    current_section = "body"  # Default section
+    # Sortare blocuri dupa coordonate verticale (y0)
+    all_blocks.sort(key=lambda b: b[1])
 
-    for i, line in enumerate(lines):
-        line_clean = line.strip()
-        if not line_clean:
+    current_section = "body"
+
+    for i, b in enumerate(all_blocks):
+        text = b[4].strip()
+        if not text:
             continue
 
-        # Primele 3 linii: Titlu RO, Titlu EN, Autori
+        # Primele blocuri: titlu si autori
         if i == 0:
-            result["title_ro"] = line_clean
+            result["title_ro"] = text
             continue
         elif i == 1:
-            result["title_en"] = line_clean
+            result["title_en"] = text
             continue
         elif i == 2:
-            result["authors"] = line_clean
+            result["authors"] = text
             continue
 
-        # Detectare secțiune după pattern
-        matched = False
-        for key, pat in patterns.items():
-            if pat.search(line_clean):
-                current_section = key
-                matched = True
+        # Detecteaza sectiuni dupa patterns
+        found = False
+        for key, keys_list in patterns.items():
+            for k in keys_list:
+                if k.lower() in text.lower():
+                    current_section = key
+                    found = True
+                    break
+            if found:
                 break
-        if matched:
+        if found:
             continue
 
-        # Adaugă linia în secțiunea curentă
+        # Adauga text in sectiunea curenta
         if current_section in result:
-            result[current_section] += line_clean + " "
+            result[current_section] += text + " "
 
-    # Salvează tot conținutul complet
-    result["body"] = full_text
+    # Salvam corpul complet
+    result["body"] = " ".join([b[4] for b in all_blocks if b[4].strip() != ""])
 
     return result
 
@@ -109,7 +111,6 @@ def upload():
         with open(path, "rb") as f:
             article_data = extract_medical_article(f)
 
-        # Salvează în DB
         slug = str(int(datetime.now().timestamp()))
         conn = sqlite3.connect("db.sqlite")
         cur = conn.cursor()
@@ -118,7 +119,7 @@ def upload():
         conn.commit()
         conn.close()
 
-        # Redirect către Builder cu datele prepopulate
+        # Builder cu datele extrase automat
         return render_template("builder.html", blocks=[article_data])
 
     return render_template("upload.html")
