@@ -1,18 +1,92 @@
-.article {
-    max-width: 800px;
+body {
+    margin:0;
+    font-family: Arial, Helvetica, sans-serif;
+    background:#f5f5f5;
+}
+
+.container {
+    max-width: 820px;
     margin: auto;
-    font-family: Arial;
-    line-height: 1.6;
+    background:white;
+    padding:40px;
 }
 
-h1 {
-    font-size: 28px;
+.title {
+    font-size: 30px;
+    font-weight: bold;
+    margin-bottom: 10px;
 }
 
-h2 {
-    margin-top: 20px;
+.authors {
+    font-weight: bold;
+    margin-bottom: 20px;
+}
+
+.section-title {
+    font-size: 20px;
+    font-weight: bold;
+    margin-top: 25px;
+}
+
+.keywords {
+    margin-bottom: 20px;
+    font-style: italic;
 }
 
 p {
-    margin-bottom: 10px;
+    line-height: 1.6;
+    margin-bottom: 12px;
+}
+
+.topbar {
+    background:#222;
+    color:white;
+    padding:10px;
+}
+
+.topbar a, .topbar button {
+    color:white;
+    margin-right:10px;
+    text-decoration:none;
+}
+
+.editor-layout {
+    display:flex;
+}
+
+.sidebar {
+    width:30%;
+    padding:10px;
+    border-right:1px solid #ccc;
+    background:#fafafa;
+}
+
+.canvas {
+    width:70%;
+    padding:20px;
+}
+
+.sidebar-block {
+    background:white;
+    padding:8px;
+    border:1px solid #ddd;
+    margin-bottom:5px;
+    cursor:pointer;
+}
+
+.block {
+    border:1px solid #ccc;
+    padding:10px;
+    margin-bottom:10px;
+    background:white;
+}
+
+.editor {
+    border:1px solid #ddd;
+    padding:5px;
+    min-height:30px;
+}
+
+.toolbar button {
+    margin-right:5px;
 }
