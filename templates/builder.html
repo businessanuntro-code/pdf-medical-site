@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>Builder Rich Text</title>
+<title>Builder Rich Text Funcțional</title>
 
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 
@@ -12,119 +12,32 @@ body {
     background:#f5f5f5;
     color:#222;
 }
-
-/* Layout Editor */
-.editor-layout {
-    display:flex;
-    height:100vh;
-}
-
-/* Sidebar */
-.sidebar {
-    width:30%;
-    padding:10px;
-    border-right:1px solid #ccc;
-    background:#fff;
-    overflow-y:auto;
-}
-
-.sidebar-block {
-    border:1px solid #ccc;
-    padding:8px;
-    margin-bottom:5px;
-    cursor:pointer;
-    background:#fafafa;
-}
-
-/* Canvas */
-.canvas {
-    width:70%;
-    padding:20px;
-    overflow-y:auto;
-}
-
-#dropzone .block {
-    border:1px solid #ccc;
-    padding:10px;
-    margin-bottom:20px;
-    background:#fff;
-    position: relative;
-}
-
-/* Buton stergere */
-.delete-btn {
-    position: absolute;
-    top:5px;
-    right:5px;
-    background:red;
-    color:white;
-    border:none;
-    border-radius:3px;
-    padding:2px 6px;
-    cursor:pointer;
-}
-
-/* Toolbar */
-.toolbar {
-    margin-bottom:5px;
-}
-.toolbar button, .toolbar input[type="color"] {
-    margin-right:5px;
-    cursor:pointer;
-}
-
-/* Editor content */
-.editor {
-    min-height:50px;
-    font-size:17px;
-    line-height:1.7;
-    color:#222;
-    font-family: Georgia, serif;
-    margin-top:5px;
-    padding:5px;
-    border:1px solid #ddd;
-}
-
-/* Titluri și paragrafe */
-.editor h1, .editor h2, .editor h3 {
-    font-weight:bold;
-    margin-top:25px;
-    margin-bottom:15px;
-}
-
-.editor p {
-    margin-bottom:18px;
-}
-
-.editor p strong, .editor p b {
-    font-weight:bold;
-}
-
-/* Abstract / Rezumat */
-.editor .abstract, .editor .rezumat {
-    font-style:italic;
-    background-color:#f9f9f9;
-    border-left:4px solid #ccc;
-    padding:15px;
-    margin-bottom:25px;
-}
+.editor-layout { display:flex; height:100vh; }
+.sidebar { width:30%; padding:10px; border-right:1px solid #ccc; background:#fff; overflow-y:auto; }
+.sidebar-block { border:1px solid #ccc; padding:8px; margin-bottom:5px; cursor:pointer; background:#fafafa; }
+.canvas { width:70%; padding:20px; overflow-y:auto; }
+#dropzone .block { border:1px solid #ccc; padding:10px; margin-bottom:20px; background:#fff; position:relative; }
+.delete-btn { position:absolute; top:5px; right:5px; background:red; color:white; border:none; border-radius:3px; padding:2px 6px; cursor:pointer; }
+.toolbar { margin-bottom:5px; }
+.toolbar button, .toolbar input[type="color"] { margin-right:5px; cursor:pointer; }
+.editor { min-height:50px; font-size:17px; line-height:1.7; color:#222; font-family: Georgia, serif; margin-top:5px; padding:5px; border:1px solid #ddd; }
+.editor h1, .editor h2, .editor h3 { font-weight:bold; margin-top:25px; margin-bottom:15px; }
+.editor p { margin-bottom:18px; }
+.editor p strong, .editor p b { font-weight:bold; }
+.editor .abstract, .editor .rezumat { font-style:italic; background-color:#f9f9f9; border-left:4px solid #ccc; padding:15px; margin-bottom:25px; }
 </style>
 </head>
 <body>
 
 <div class="editor-layout">
 
-    <!-- Sidebar -->
     <div class="sidebar">
         <h3>Blocuri PDF</h3>
         {% for b in blocks %}
-        <div class="sidebar-block" onclick="addBlock('{{b.text|safe}}')">
-            {{ b.text[:100] }}
-        </div>
+        <div class="sidebar-block" onclick="addBlock('{{b.text|safe}}')">{{ b.text[:100] }}</div>
         {% endfor %}
     </div>
 
-    <!-- Canvas -->
     <div class="canvas">
         <h2>Editor (drag & drop)</h2>
         <div id="dropzone"></div>
@@ -135,8 +48,10 @@ body {
 </div>
 
 <script>
-// Drag & drop
 let dropzone = document.getElementById("dropzone");
+let activeEditor = null;
+
+// Drag & drop
 new Sortable(dropzone, { animation:150 });
 
 // Adauga bloc
@@ -147,53 +62,63 @@ function addBlock(text){
     div.innerHTML = `
         <button class="delete-btn" onclick="deleteBlock(this)">X</button>
         <div class="toolbar">
-            <button onclick="cmd(event,'bold')"><b>B</b></button>
-            <button onclick="cmd(event,'italic')"><i>I</i></button>
-            <button onclick="cmd(event,'underline')"><u>U</u></button>
-            <button onclick="cmd(event,'superscript')">X²</button>
-            <input type="color" onchange="cmdColor(event)" title="Culoare text">
-            <button onclick="cmd(event,'insertHTML','<br>')">Enter</button>
-            <button onclick="cmd(event,'insertHTML','&nbsp;&nbsp;&nbsp;&nbsp;')">Tab</button>
+            <button onclick="format('bold')"><b>B</b></button>
+            <button onclick="format('italic')"><i>I</i></button>
+            <button onclick="format('underline')"><u>U</u></button>
+            <button onclick="format('superscript')">X²</button>
+            <input type="color" onchange="formatColor(this.value)" title="Culoare text">
+            <button onclick="insertHTML('<br>')">Enter</button>
+            <button onclick="insertHTML('&nbsp;&nbsp;&nbsp;&nbsp;')">Tab</button>
         </div>
-        <div contenteditable="true" class="editor">${text}</div>
+        <div contenteditable="true" class="editor" onfocus="activeEditor=this">${text}</div>
     `;
 
     dropzone.appendChild(div);
 }
 
 // Sterge bloc
-function deleteBlock(btn){
-    btn.parentElement.remove();
+function deleteBlock(btn){ btn.parentElement.remove(); }
+
+// Executa format
+function format(cmd){
+    if(activeEditor) {
+        activeEditor.focus();
+        document.execCommand(cmd, false, null);
+    }
 }
 
-// Comenzi toolbar
-function cmd(e, command, value=null){
-    e.preventDefault();
-    document.execCommand(command, false, value);
+// Culoare text
+function formatColor(color){
+    if(activeEditor){
+        activeEditor.focus();
+        document.execCommand('foreColor', false, color);
+    }
 }
 
-// Color picker
-function cmdColor(e){
-    const color = e.target.value;
-    document.execCommand('foreColor', false, color);
+// Insert HTML (Enter / Tab)
+function insertHTML(html){
+    if(activeEditor){
+        activeEditor.focus();
+        document.execCommand('insertHTML', false, html);
+    }
 }
 
 // Salvare articole
 function save(){
     let data=[];
     document.querySelectorAll("#dropzone .block").forEach(b=>{
-        let html = b.querySelector(".editor").innerHTML;
+        let html=b.querySelector(".editor").innerHTML;
         data.push({html:html});
     });
 
-    let form = document.createElement("form");
-    form.method = "POST";
-    form.action = "/save";
+    let form=document.createElement("form");
+    form.method="POST";
+    form.action="/save";
 
-    let input = document.createElement("input");
-    input.type = "hidden";
-    input.name = "data";
-    input.value = JSON.stringify(data);
+    let input=document.createElement("input");
+    input.type="hidden";
+    input.name="data";
+    input.value=JSON.stringify(data);
 
     form.appendChild(input);
     document.body.appendChild(form);
