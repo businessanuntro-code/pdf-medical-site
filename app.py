@@ -1,5 +1,5 @@
 from flask import Flask, request, render_template, redirect
-import fitz
+import fitz  # PyMuPDF
 import sqlite3
 import json
 import os
@@ -18,14 +18,7 @@ def init_db():
     CREATE TABLE IF NOT EXISTS articole (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         slug TEXT,
-        continut_html TEXT
-    )
-    """)
-
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS templates (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        structura TEXT
+        continut_json TEXT
     )
     """)
 
@@ -35,34 +28,74 @@ def init_db():
 init_db()
 
 # ---------------- PDF ----------------
-def extract_blocks(file_stream):
+def extract_medical_article(file_stream):
     doc = fitz.open(stream=file_stream.read(), filetype="pdf")
-    page = doc[0]
+    result = {
+        "title_ro": "",
+        "title_en": "",
+        "authors": "",
+        "abstract": "",
+        "keywords": "",
+        "rezumat": "",
+        "cuvinte_cheie": "",
+        "body": "",
+        "bibliografie": ""
+    }
 
-    blocks = []
-    raw = page.get_text("dict")["blocks"]
+    # Patterns pentru secțiuni
+    import re
+    patterns = {
+        "abstract": re.compile(r"\babstract\b", re.IGNORECASE),
+        "keywords": re.compile(r"\bkeywords\b", re.IGNORECASE),
+        "rezumat": re.compile(r"\brezumat\b", re.IGNORECASE),
+        "cuvinte_cheie": re.compile(r"\bcuvinte[- ]cheie\b", re.IGNORECASE),
+        "bibliografie": re.compile(r"\b(bibliografie|references|literatura)\b", re.IGNORECASE)
+    }
 
-    for b in raw:
-        if "lines" not in b:
+    full_text = ""
+    for page in doc:
+        full_text += page.get_text("text") + "\n"
+
+    lines = full_text.split("\n")
+    current_section = "body"  # Default section
+
+    for i, line in enumerate(lines):
+        line_clean = line.strip()
+        if not line_clean:
             continue
 
-        text = ""
-        for line in b["lines"]:
-            for span in line["spans"]:
-                text += span["text"] + " "
+        # Primele 3 linii: Titlu RO, Titlu EN, Autori
+        if i == 0:
+            result["title_ro"] = line_clean
+            continue
+        elif i == 1:
+            result["title_en"] = line_clean
+            continue
+        elif i == 2:
+            result["authors"] = line_clean
+            continue
 
-        text = text.strip()
+        # Detectare secțiune după pattern
+        matched = False
+        for key, pat in patterns.items():
+            if pat.search(line_clean):
+                current_section = key
+                matched = True
+                break
+        if matched:
+            continue
 
-        if text:
-            blocks.append({
-                "id": len(blocks),
-                "text": text
-            })
+        # Adaugă linia în secțiunea curentă
+        if current_section in result:
+            result[current_section] += line_clean + " "
 
-    return blocks
+    # Salvează tot conținutul complet
+    result["body"] = full_text
+
+    return result
 
 # ---------------- ROUTES ----------------
-@app.route("/")
+@app.route("/", methods=["GET"])
 def home():
     return render_template("home.html")
 
@@ -74,69 +107,42 @@ def upload():
         file.save(path)
 
         with open(path, "rb") as f:
-            blocks = extract_blocks(f)
+            article_data = extract_medical_article(f)
 
-        # Preluam structura salvata anterior
+        # Salvează în DB
+        slug = str(int(datetime.now().timestamp()))
         conn = sqlite3.connect("db.sqlite")
         cur = conn.cursor()
-        cur.execute("SELECT structura FROM templates ORDER BY id DESC LIMIT 1")
-        row = cur.fetchone()
-        template_data = json.loads(row[0]) if row else None
+        cur.execute("INSERT INTO articole (slug, continut_json) VALUES (?,?)",
+                    (slug, json.dumps(article_data)))
+        conn.commit()
         conn.close()
 
-        if template_data:
-            # Folosim șablonul salvat pentru a prepopula builder-ul
-            for i in range(len(blocks)):
-                if i < len(template_data):
-                    blocks[i]['text'] = template_data[i]['html']
-
-        return render_template("builder.html", blocks=blocks)
+        # Redirect către Builder cu datele prepopulate
+        return render_template("builder.html", blocks=[article_data])
 
     return render_template("upload.html")
-
-@app.route("/save", methods=["POST"])
-def save():
-    data = json.loads(request.form["data"])
-
-    html = ""
-    for b in data:
-        html += f"<div>{b['html']}</div>"
-
-    slug = str(int(datetime.now().timestamp()))
-
-    conn = sqlite3.connect("db.sqlite")
-    cur = conn.cursor()
-
-    cur.execute("INSERT INTO articole (slug, continut_html) VALUES (?,?)", (slug, html))
-    cur.execute("DELETE FROM templates")
-    cur.execute("INSERT INTO templates (structura) VALUES (?)", (json.dumps(data),))
-
-    conn.commit()
-    conn.close()
-
-    return redirect(f"/view/{slug}")
 
 @app.route("/view/<slug>")
 def view(slug):
     conn = sqlite3.connect("db.sqlite")
     cur = conn.cursor()
-
-    cur.execute("SELECT continut_html FROM articole WHERE slug=?", (slug,))
-    html = cur.fetchone()[0]
-
+    cur.execute("SELECT continut_json FROM articole WHERE slug=?", (slug,))
+    row = cur.fetchone()
     conn.close()
-
-    return f"<div style='max-width:800px;margin:auto'>{html}</div>"
+    if row:
+        content = json.loads(row[0])
+        return render_template("article.html", content=content)
+    return "Articolul nu a fost găsit", 404
 
 @app.route("/articles")
-def articles_list():
+def articles():
     conn = sqlite3.connect("db.sqlite")
     cur = conn.cursor()
-    cur.execute("SELECT id, slug FROM articole ORDER BY id DESC")
-    articles = cur.fetchall()
+    cur.execute("SELECT slug, json_extract(continut_json, '$.title_ro') FROM articole ORDER BY id DESC")
+    rows = cur.fetchall()
     conn.close()
-    return render_template("articles.html", articles=articles)
+    return render_template("articles.html", articles=rows)
 
-# ---------------- RUN ----------------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
