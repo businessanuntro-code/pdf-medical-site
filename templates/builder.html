@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Builder</title>
+
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+
+<style>
+body {
+    display:flex;
+    font-family:Arial;
+}
+
+#sidebar {
+    width:30%;
+    border-right:1px solid #ccc;
+    padding:10px;
+}
+
+#canvas {
+    width:70%;
+    padding:20px;
+}
+
+.block {
+    border:1px solid #aaa;
+    padding:10px;
+    margin-bottom:10px;
+    background:#fff;
+    cursor:move;
+}
+
+.editor {
+    border:1px solid #ddd;
+    padding:5px;
+    min-height:30px;
+}
+
+.toolbar button {
+    margin-right:5px;
+}
+</style>
+</head>
+
+<body>
+
+<!-- SIDEBAR -->
+<div id="sidebar">
+    <h3>Blocuri PDF</h3>
+
+    {% for b in blocks %}
+    <div class="block" onclick="addBlock('{{b.text|safe}}')">
+        {{ b.text[:100] }}
+    </div>
+    {% endfor %}
+</div>
+
+<!-- CANVAS -->
+<div id="canvas">
+
+<h2>Editor (drag & drop)</h2>
+
+<div id="dropzone"></div>
+
+<br>
+<button onclick="save()">💾 Save</button>
+
+</div>
+
+<script>
+let dropzone = document.getElementById("dropzone");
+
+// drag sort
+new Sortable(dropzone, {
+    animation: 150
+});
+
+function addBlock(text) {
+    let div = document.createElement("div");
+    div.className = "block";
+
+    div.innerHTML = `
+        <div class="toolbar">
+            <button onclick="cmd(event,'bold')">B</button>
+            <button onclick="cmd(event,'italic')">I</button>
+            <button onclick="cmd(event,'underline')">U</button>
+            <button onclick="cmd(event,'superscript')">X²</button>
+        </div>
+        <div contenteditable="true" class="editor">${text}</div>
+    `;
+
+    dropzone.appendChild(div);
+}
+
+function cmd(e, command) {
+    e.preventDefault();
+    document.execCommand(command);
+}
+
+function save() {
+    let data = [];
+
+    document.querySelectorAll("#dropzone .block").forEach(b => {
+        let html = b.querySelector(".editor").innerHTML;
+        data.push({html: html});
+    });
+
+    let form = document.createElement("form");
+    form.method = "POST";
+    form.action = "/save";
+
+    let input = document.createElement("input");
+    input.type = "hidden";
+    input.name = "data";
+    input.value = JSON.stringify(data);
+
+    form.appendChild(input);
+    document.body.appendChild(form);
+    form.submit();
+}
+</script>
+
+</body>
+</html>
