@@ -4,40 +4,60 @@ body {
     background:#f5f5f5;
 }
 
-.container {
-    max-width: 820px;
-    margin: auto;
-    background:white;
-    padding:40px;
+/* 🔥 PAGINA CENTRATA */
+.page {
+    display:flex;
+    justify-content:center;
 }
 
+/* 🔥 ARTICOL */
+.container {
+    max-width: 820px;
+    width:100%;
+    background:white;
+    padding:40px;
+    margin-top:20px;
+}
+
+/* 🔥 TITLU */
 .title {
     font-size: 30px;
     font-weight: bold;
     margin-bottom: 10px;
 }
 
+.title.en {
+    font-size: 24px;
+    color:#444;
+    margin-bottom:15px;
+}
+
+/* 🔥 AUTORI */
 .authors {
     font-weight: bold;
     margin-bottom: 20px;
 }
 
+/* 🔥 SECTIUNI */
 .section-title {
     font-size: 20px;
     font-weight: bold;
     margin-top: 25px;
 }
 
+/* 🔥 KEYWORDS */
 .keywords {
     margin-bottom: 20px;
     font-style: italic;
 }
 
+/* TEXT */
 p {
     line-height: 1.6;
     margin-bottom: 12px;
 }
 
+/* TOPBAR */
 .topbar {
     background:#222;
     color:white;
@@ -50,6 +70,7 @@ p {
     text-decoration:none;
 }
 
+/* BUILDER */
 .editor-layout {
     display:flex;
 }
