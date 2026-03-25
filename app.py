@@ -85,16 +85,23 @@ def upload():
     </form>
     """
 
+# 🔥 Builder (RE-EDITARE)
 @app.route("/builder")
 def builder():
+    blocks = []
+
     try:
         conn = sqlite3.connect("db.sqlite")
         cur = conn.cursor()
         cur.execute("SELECT structura FROM templates ORDER BY id DESC LIMIT 1")
-        data = json.loads(cur.fetchone()[0])
+        result = cur.fetchone()
         conn.close()
 
-        blocks = [{"text": b["html"]} for b in data]
+        if result:
+            data = json.loads(result[0])
+            blocks = [{"text": b["html"]} for b in data]
+        else:
+            raise Exception()
 
     except:
         with open("blocks.json") as f:
@@ -102,6 +109,7 @@ def builder():
 
     return render_template("builder.html", blocks=blocks)
 
+# 🔥 SAVE
 @app.route("/save", methods=["POST"])
 def save():
     data = json.loads(request.form["data"])
@@ -112,16 +120,19 @@ def save():
         text = b["html"]
 
         if i == 0:
-            html += f"<h1 class='title'>{text}</h1>"
+            html += f"<h1 class='title'><strong>{text}</strong></h1>"
 
         elif i == 1:
-            html += f"<div class='authors'>{text}</div>"
+            html += f"<h1 class='title en'><strong>{text}</strong></h1>"
+
+        elif i == 2:
+            html += f"<div class='authors'><strong>{text}</strong></div>"
 
         elif "abstract" in text.lower():
             html += f"<h2 class='section-title'>{text}</h2>"
 
         elif "keywords" in text.lower():
-            html += f"<div class='keywords'>{text}</div>"
+            html += f"<div class='keywords'><strong>{text}</strong></div>"
 
         elif "rezumat" in text.lower():
             html += f"<h2 class='section-title'>{text}</h2>"
@@ -143,6 +154,7 @@ def save():
 
     return redirect(f"/view/{slug}")
 
+# 🔥 VIEW ARTICOL
 @app.route("/view/<slug>")
 def view(slug):
     conn = sqlite3.connect("db.sqlite")
@@ -165,8 +177,10 @@ def view(slug):
         <a href="/builder">✏️ Editează</a>
     </div>
 
-    <div class="container">
-        {html}
+    <div class="page">
+        <div class="container">
+            {html}
+        </div>
     </div>
 
     </body>
