@@ -62,28 +62,37 @@ def extract_blocks(file_stream):
     return blocks
 
 # ---------------- ROUTES ----------------
-@app.route("/", methods=["GET", "POST"])
+@app.route("/")
+def home():
+    return render_template("home.html")
+
+@app.route("/upload", methods=["GET", "POST"])
 def upload():
     if request.method == "POST":
-        file = request.files["pdf"]
+        file = request.files["pdf_file"]
         path = os.path.join(UPLOAD_FOLDER, file.filename)
         file.save(path)
 
         with open(path, "rb") as f:
             blocks = extract_blocks(f)
 
-        with open("blocks.json", "w") as f:
-            json.dump(blocks, f)
+        # Preluam structura salvata anterior
+        conn = sqlite3.connect("db.sqlite")
+        cur = conn.cursor()
+        cur.execute("SELECT structura FROM templates ORDER BY id DESC LIMIT 1")
+        row = cur.fetchone()
+        template_data = json.loads(row[0]) if row else None
+        conn.close()
+
+        if template_data:
+            # Folosim șablonul salvat pentru a prepopula builder-ul
+            for i in range(len(blocks)):
+                if i < len(template_data):
+                    blocks[i]['text'] = template_data[i]['html']
 
         return render_template("builder.html", blocks=blocks)
 
-    return """
-    <h2>Upload PDF</h2>
-    <form method="post" enctype="multipart/form-data">
-        <input type="file" name="pdf">
-        <button>Upload</button>
-    </form>
-    """
+    return render_template("upload.html")
 
 @app.route("/save", methods=["POST"])
 def save():
@@ -118,6 +127,15 @@ def view(slug):
     conn.close()
 
     return f"<div style='max-width:800px;margin:auto'>{html}</div>"
+
+@app.route("/articles")
+def articles_list():
+    conn = sqlite3.connect("db.sqlite")
+    cur = conn.cursor()
+    cur.execute("SELECT id, slug FROM articole ORDER BY id DESC")
+    articles = cur.fetchall()
+    conn.close()
+    return render_template("articles.html", articles=articles)
 
 # ---------------- RUN ----------------
 if __name__ == "__main__":
