@@ -4,7 +4,6 @@
 <title>Builder</title>
 
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
-
 <link rel="stylesheet" href="/static/style.css">
 
 </head>
@@ -13,18 +12,16 @@
 
 <div class="editor-layout">
 
-<!-- SIDEBAR -->
 <div class="sidebar">
     <h3>Blocuri PDF</h3>
 
     {% for b in blocks %}
-    <div class="sidebar-block" onclick="addBlock('{{b.text|safe}}')">
+    <div class="sidebar-block" onclick="addBlock(`{{b.text|safe}}`)">
         {{ b.text[:100] }}
     </div>
     {% endfor %}
 </div>
 
-<!-- CANVAS -->
 <div class="canvas">
 
 <div class="topbar">
