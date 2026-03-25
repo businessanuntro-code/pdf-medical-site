@@ -1,4 +1,4 @@
-from flask import Flask, request, render_template, redirect, url_for
+from flask import Flask, request, render_template, redirect
 import fitz
 import sqlite3
 import json
@@ -9,7 +9,7 @@ app = Flask(__name__)
 UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# -------------------- DB --------------------
+# ---------------- DB ----------------
 def init_db():
     conn = sqlite3.connect("db.sqlite")
     cur = conn.cursor()
@@ -17,7 +17,6 @@ def init_db():
     cur.execute("""
     CREATE TABLE IF NOT EXISTS articole (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        titlu TEXT,
         slug TEXT,
         continut_html TEXT
     )
@@ -26,7 +25,7 @@ def init_db():
     cur.execute("""
     CREATE TABLE IF NOT EXISTS templates (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        reguli TEXT
+        structura TEXT
     )
     """)
 
@@ -35,15 +34,15 @@ def init_db():
 
 init_db()
 
-# -------------------- PDF BLOCKS --------------------
+# ---------------- PDF ----------------
 def extract_blocks(file_stream):
     doc = fitz.open(stream=file_stream.read(), filetype="pdf")
     page = doc[0]
 
     blocks = []
-    raw_blocks = page.get_text("dict")["blocks"]
+    raw = page.get_text("dict")["blocks"]
 
-    for b in raw_blocks:
+    for b in raw:
         if "lines" not in b:
             continue
 
@@ -62,128 +61,64 @@ def extract_blocks(file_stream):
 
     return blocks
 
-# -------------------- APPLY TEMPLATE --------------------
-def apply_template(blocks, template, edited_texts):
-    sections = {
-        "title_ro": "",
-        "title_en": "",
-        "autori": "",
-        "abstract": "",
-        "abstract_text": "",
-        "keywords": "",
-        "keywords_list": "",
-        "rezumat": "",
-        "rezumat_text": "",
-        "cuvinte_cheie": "",
-        "cuvinte_cheie_list": "",
-        "text": []
-    }
-
-    for b in blocks:
-        bid = str(b["id"])
-        role = template.get(bid, "ignore")
-
-        # 🔥 text editat din UI
-        text = edited_texts.get(bid, b["text"])
-
-        if role == "ignore":
-            continue
-
-        if role in sections:
-            if isinstance(sections[role], list):
-                sections[role].append(text)
-            else:
-                sections[role] += text + " "
-        else:
-            sections["text"].append(text)
-
-    html = f"""
-    <h1>{sections['title_ro']}</h1>
-    <p><em>{sections['title_en']}</em></p>
-    <p><strong>{sections['autori']}</strong></p>
-
-    <h2>{sections['abstract']}</h2>
-    <p>{sections['abstract_text']}</p>
-    <p><strong>{sections['keywords']}</strong>: {sections['keywords_list']}</p>
-
-    <h2>{sections['rezumat']}</h2>
-    <p>{sections['rezumat_text']}</p>
-    <p><strong>{sections['cuvinte_cheie']}</strong>: {sections['cuvinte_cheie_list']}</p>
-    """
-
-    for t in sections["text"]:
-        html += f"<p>{t}</p>"
-
-    return html
-
-# -------------------- ROUTES --------------------
-@app.route("/")
-def home():
-    conn = sqlite3.connect("db.sqlite")
-    cur = conn.cursor()
-    cur.execute("SELECT titlu, slug FROM articole ORDER BY id DESC")
-    articole = cur.fetchall()
-    conn.close()
-
-    return render_template("home.html", articole=articole)
-
-@app.route("/upload", methods=["GET", "POST"])
+# ---------------- ROUTES ----------------
+@app.route("/", methods=["GET", "POST"])
 def upload():
     if request.method == "POST":
         file = request.files["pdf"]
-        filepath = os.path.join(UPLOAD_FOLDER, file.filename)
-        file.save(filepath)
+        path = os.path.join(UPLOAD_FOLDER, file.filename)
+        file.save(path)
 
-        with open(filepath, "rb") as f:
+        with open(path, "rb") as f:
             blocks = extract_blocks(f)
 
-        with open("last_blocks.json", "w") as f:
+        with open("blocks.json", "w") as f:
             json.dump(blocks, f)
 
-        return render_template("calibrate.html", blocks=blocks)
+        return render_template("builder.html", blocks=blocks)
 
-    return render_template("upload.html")
+    return """
+    <h2>Upload PDF</h2>
+    <form method="post" enctype="multipart/form-data">
+        <input type="file" name="pdf">
+        <button>Upload</button>
+    </form>
+    """
 
-@app.route("/save_template", methods=["POST"])
-def save_template():
-    template = json.loads(request.form["template"])
-    edited_texts = json.loads(request.form["edited"])
+@app.route("/save", methods=["POST"])
+def save():
+    data = json.loads(request.form["data"])
 
-    conn = sqlite3.connect("db.sqlite")
-    cur = conn.cursor()
-    cur.execute("DELETE FROM templates")
-    cur.execute("INSERT INTO templates (reguli) VALUES (?)", (json.dumps(template),))
-    conn.commit()
-    conn.close()
-
-    with open("last_blocks.json") as f:
-        blocks = json.load(f)
-
-    html = apply_template(blocks, template, edited_texts)
+    html = ""
+    for b in data:
+        html += f"<div>{b['html']}</div>"
 
     slug = str(int(datetime.now().timestamp()))
 
     conn = sqlite3.connect("db.sqlite")
     cur = conn.cursor()
-    cur.execute(
-        "INSERT INTO articole (titlu, slug, continut_html) VALUES (?, ?, ?)",
-        ("articol", slug, html)
-    )
+
+    cur.execute("INSERT INTO articole (slug, continut_html) VALUES (?,?)", (slug, html))
+    cur.execute("DELETE FROM templates")
+    cur.execute("INSERT INTO templates (structura) VALUES (?)", (json.dumps(data),))
+
     conn.commit()
     conn.close()
 
-    return redirect(f"/articol/{slug}")
+    return redirect(f"/view/{slug}")
 
-@app.route("/articol/<slug>")
-def articol(slug):
+@app.route("/view/<slug>")
+def view(slug):
     conn = sqlite3.connect("db.sqlite")
     cur = conn.cursor()
+
     cur.execute("SELECT continut_html FROM articole WHERE slug=?", (slug,))
-    articol = cur.fetchone()
+    html = cur.fetchone()[0]
+
     conn.close()
 
-    return render_template("article.html", content=articol[0])
+    return f"<div style='max-width:800px;margin:auto'>{html}</div>"
 
-# -------------------- RUN --------------------
+# ---------------- RUN ----------------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
