@@ -62,8 +62,6 @@ def extract_blocks(file_stream):
     return blocks
 
 # ---------------- ROUTES ----------------
-
-# 🔥 Upload → CALIBRARE
 @app.route("/", methods=["GET", "POST"])
 def upload():
     if request.method == "POST":
@@ -77,7 +75,7 @@ def upload():
         with open("blocks.json", "w") as f:
             json.dump(blocks, f)
 
-        return render_template("calibrate.html", blocks=blocks)
+        return render_template("builder.html", blocks=blocks)
 
     return """
     <h2>Upload PDF</h2>
@@ -87,36 +85,16 @@ def upload():
     </form>
     """
 
-# 🔥 Calibrare → Builder
-@app.route("/to_builder", methods=["POST"])
-def to_builder():
-    selections = request.form.to_dict()
-
-    with open("mapping.json", "w") as f:
-        json.dump(selections, f)
-
-    with open("blocks.json") as f:
-        blocks = json.load(f)
-
-    return render_template("builder.html", blocks=blocks)
-
-# 🔥 Builder (re-editare)
 @app.route("/builder")
 def builder():
-    blocks = []
-
     try:
         conn = sqlite3.connect("db.sqlite")
         cur = conn.cursor()
         cur.execute("SELECT structura FROM templates ORDER BY id DESC LIMIT 1")
-        result = cur.fetchone()
+        data = json.loads(cur.fetchone()[0])
         conn.close()
 
-        if result:
-            data = json.loads(result[0])
-            blocks = [{"text": b["html"]} for b in data]
-        else:
-            raise Exception()
+        blocks = [{"text": b["html"]} for b in data]
 
     except:
         with open("blocks.json") as f:
@@ -124,7 +102,6 @@ def builder():
 
     return render_template("builder.html", blocks=blocks)
 
-# 🔥 SAVE
 @app.route("/save", methods=["POST"])
 def save():
     data = json.loads(request.form["data"])
@@ -135,19 +112,16 @@ def save():
         text = b["html"]
 
         if i == 0:
-            html += f"<h1 class='title'><strong>{text}</strong></h1>"
+            html += f"<h1 class='title'>{text}</h1>"
 
         elif i == 1:
-            html += f"<h1 class='title en'><strong>{text}</strong></h1>"
-
-        elif i == 2:
-            html += f"<div class='authors'><strong>{text}</strong></div>"
+            html += f"<div class='authors'>{text}</div>"
 
         elif "abstract" in text.lower():
             html += f"<h2 class='section-title'>{text}</h2>"
 
         elif "keywords" in text.lower():
-            html += f"<div class='keywords'><strong>{text}</strong></div>"
+            html += f"<div class='keywords'>{text}</div>"
 
         elif "rezumat" in text.lower():
             html += f"<h2 class='section-title'>{text}</h2>"
@@ -169,7 +143,6 @@ def save():
 
     return redirect(f"/view/{slug}")
 
-# 🔥 VIEW
 @app.route("/view/<slug>")
 def view(slug):
     conn = sqlite3.connect("db.sqlite")
@@ -192,10 +165,8 @@ def view(slug):
         <a href="/builder">✏️ Editează</a>
     </div>
 
-    <div class="page">
-        <div class="container">
-            {html}
-        </div>
+    <div class="container">
+        {html}
     </div>
 
     </body>
