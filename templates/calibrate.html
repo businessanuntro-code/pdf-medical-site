@@ -1,35 +1,88 @@
-<h1>Calibrare Template</h1>
+<h1>Editor Calibrare (tip WordPress)</h1>
 
-<form method="post" action="/save_template">
+<form method="post" action="/save_template" onsubmit="prepareData()">
+
+<input type="hidden" name="template" id="templateInput">
+<input type="hidden" name="edited" id="editedInput">
 
 {% for b in blocks %}
-<div style="border:1px solid #ccc; padding:10px; margin-bottom:10px;">
-    <b>{{ b.text }}</b><br><br>
+<div class="block">
 
-    <select name="{{ b.id }}">
+    <!-- TOOLBAR -->
+    <div class="toolbar">
+        <button type="button" onclick="format({{b.id}}, 'bold')">B</button>
+        <button type="button" onclick="format({{b.id}}, 'italic')">I</button>
+        <button type="button" onclick="format({{b.id}}, 'underline')">U</button>
+        <button type="button" onclick="format({{b.id}}, 'superscript')">X²</button>
+    </div>
+
+    <!-- TEXT EDITABIL -->
+    <div contenteditable="true" class="editor" id="text-{{b.id}}">
+        {{ b.text }}
+    </div>
+
+    <!-- SELECT ROLE -->
+    <select id="role-{{b.id}}">
         <option value="ignore">Ignore</option>
-
         <option value="title_ro">Titlu RO</option>
         <option value="title_en">Titlu EN</option>
         <option value="autori">Autori</option>
-
         <option value="abstract">Abstract</option>
         <option value="abstract_text">Text Abstract</option>
-
         <option value="keywords">Keywords</option>
-        <option value="keywords_list">Keywords separate prin virgula</option>
-
+        <option value="keywords_list">Keywords list</option>
         <option value="rezumat">Rezumat</option>
         <option value="rezumat_text">Text Rezumat</option>
-
         <option value="cuvinte_cheie">Cuvinte Cheie</option>
-        <option value="cuvinte_cheie_list">Cuvinte Cheie separate prin virgula</option>
-
+        <option value="cuvinte_cheie_list">Lista Cuvinte Cheie</option>
         <option value="text">Text</option>
     </select>
+
 </div>
 {% endfor %}
 
-<button type="submit">Salvează Template</button>
+<br>
+<button type="submit">💾 Salvează Template + Articol</button>
 
-</form>
+<script>
+function format(id, cmd) {
+    document.execCommand(cmd, false, null);
+}
+
+function prepareData() {
+    let template = {};
+    let edited = {};
+
+    document.querySelectorAll(".editor").forEach(el => {
+        let id = el.id.replace("text-", "");
+        edited[id] = el.innerHTML;
+    });
+
+    document.querySelectorAll("select").forEach(el => {
+        let id = el.id.replace("role-", "");
+        template[id] = el.value;
+    });
+
+    document.getElementById("templateInput").value = JSON.stringify(template);
+    document.getElementById("editedInput").value = JSON.stringify(edited);
+}
+</script>
+
+<style>
+.block {
+    border:1px solid #ccc;
+    padding:10px;
+    margin-bottom:10px;
+}
+
+.editor {
+    border:1px solid #aaa;
+    padding:8px;
+    min-height:40px;
+    margin-bottom:5px;
+}
+
+.toolbar button {
+    margin-right:5px;
+}
+</style>
