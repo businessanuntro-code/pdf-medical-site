@@ -62,13 +62,13 @@ function addBlock(text){
     div.innerHTML = `
         <button class="delete-btn" onclick="deleteBlock(this)">X</button>
         <div class="toolbar">
-            <button onclick="format('bold')"><b>B</b></button>
-            <button onclick="format('italic')"><i>I</i></button>
-            <button onclick="format('underline')"><u>U</u></button>
-            <button onclick="format('superscript')">X²</button>
-            <input type="color" onchange="formatColor(this.value)" title="Culoare text">
-            <button onclick="insertHTML('<br>')">Enter</button>
-            <button onclick="insertHTML('&nbsp;&nbsp;&nbsp;&nbsp;')">Tab</button>
+            <button onmousedown="execCmd('bold')"><b>B</b></button>
+            <button onmousedown="execCmd('italic')"><i>I</i></button>
+            <button onmousedown="execCmd('underline')"><u>U</u></button>
+            <button onmousedown="execCmd('superscript')">X²</button>
+            <input type="color" oninput="execCmdColor(this.value)" title="Culoare text">
+            <button onmousedown="insertHTML('<br>')">Enter</button>
+            <button onmousedown="insertHTML('&nbsp;&nbsp;&nbsp;&nbsp;')">Tab</button>
         </div>
         <div contenteditable="true" class="editor" onfocus="activeEditor=this">${text}</div>
     `;
@@ -80,22 +80,22 @@ function addBlock(text){
 function deleteBlock(btn){ btn.parentElement.remove(); }
 
 // Executa format
-function format(cmd){
-    if(activeEditor) {
+function execCmd(command){
+    if(activeEditor){
         activeEditor.focus();
-        document.execCommand(cmd, false, null);
+        document.execCommand(command,false,null);
     }
 }
 
-// Culoare text
-function formatColor(color){
+// Color picker
+function execCmdColor(color){
     if(activeEditor){
         activeEditor.focus();
         document.execCommand('foreColor', false, color);
     }
 }
 
-// Insert HTML (Enter / Tab)
+// Insert HTML
 function insertHTML(html){
     if(activeEditor){
         activeEditor.focus();
@@ -107,7 +107,7 @@ function insertHTML(html){
 function save(){
     let data=[];
     document.querySelectorAll("#dropzone .block").forEach(b=>{
-        let html=b.querySelector(".editor").innerHTML;
+        let html = b.querySelector(".editor").innerHTML;
         data.push({html:html});
     });
 
