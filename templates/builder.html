@@ -1,31 +1,25 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>Builder Rich Text Funcțional</title>
+<title>Builder Quill Rich Text</title>
 
+<!-- Quill CSS -->
+<link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet">
+
+<!-- Sortable.js -->
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 
 <style>
-body {
-    margin:0;
-    font-family: Georgia, serif;
-    background:#f5f5f5;
-    color:#222;
-}
+body { margin:0; font-family: Georgia, serif; background:#f5f5f5; color:#222; }
 .editor-layout { display:flex; height:100vh; }
 .sidebar { width:30%; padding:10px; border-right:1px solid #ccc; background:#fff; overflow-y:auto; }
 .sidebar-block { border:1px solid #ccc; padding:8px; margin-bottom:5px; cursor:pointer; background:#fafafa; }
 .canvas { width:70%; padding:20px; overflow-y:auto; }
-#dropzone .block { border:1px solid #ccc; padding:10px; margin-bottom:20px; background:#fff; position:relative; }
+.block { border:1px solid #ccc; padding:5px; margin-bottom:20px; background:#fff; position:relative; }
 .delete-btn { position:absolute; top:5px; right:5px; background:red; color:white; border:none; border-radius:3px; padding:2px 6px; cursor:pointer; }
-.toolbar { margin-bottom:5px; }
-.toolbar button, .toolbar input[type="color"] { margin-right:5px; cursor:pointer; }
-.editor { min-height:50px; font-size:17px; line-height:1.7; color:#222; font-family: Georgia, serif; margin-top:5px; padding:5px; border:1px solid #ddd; }
-.editor h1, .editor h2, .editor h3 { font-weight:bold; margin-top:25px; margin-bottom:15px; }
-.editor p { margin-bottom:18px; }
-.editor p strong, .editor p b { font-weight:bold; }
-.editor .abstract, .editor .rezumat { font-style:italic; background-color:#f9f9f9; border-left:4px solid #ccc; padding:15px; margin-bottom:25px; }
+.quill-container { height:150px; }
 </style>
+
 </head>
 <body>
 
@@ -47,9 +41,12 @@ body {
 
 </div>
 
+<!-- Quill JS -->
+<script src="https://cdn.quilljs.com/1.3.7/quill.js"></script>
+
 <script>
 let dropzone = document.getElementById("dropzone");
-let activeEditor = null;
+let quills = []; // Array pentru toate editor-urile
 
 // Drag & drop
 new Sortable(dropzone, { animation:150 });
@@ -59,66 +56,59 @@ function addBlock(text){
     let div = document.createElement("div");
     div.className = "block";
 
+    // ID unic pentru fiecare editor
+    let editorId = 'editor-' + Date.now();
+
     div.innerHTML = `
         <button class="delete-btn" onclick="deleteBlock(this)">X</button>
-        <div class="toolbar">
-            <button onmousedown="execCmd('bold')"><b>B</b></button>
-            <button onmousedown="execCmd('italic')"><i>I</i></button>
-            <button onmousedown="execCmd('underline')"><u>U</u></button>
-            <button onmousedown="execCmd('superscript')">X²</button>
-            <input type="color" oninput="execCmdColor(this.value)" title="Culoare text">
-            <button onmousedown="insertHTML('<br>')">Enter</button>
-            <button onmousedown="insertHTML('&nbsp;&nbsp;&nbsp;&nbsp;')">Tab</button>
-        </div>
-        <div contenteditable="true" class="editor" onfocus="activeEditor=this">${text}</div>
+        <div id="${editorId}" class="quill-container"></div>
     `;
 
     dropzone.appendChild(div);
+
+    // Initializeaza Quill pentru acest editor
+    let quill = new Quill('#' + editorId, {
+        theme: 'snow',
+        modules: {
+            toolbar: [
+                ['bold', 'italic', 'underline', { 'script': 'super' }],
+                [{ 'color': [] }],
+                [{ 'indent': '-1'}, { 'indent': '+1' }],
+                ['clean']
+            ]
+        }
+    });
+
+    // Daca vine text initial, il setam
+    quill.root.innerHTML = text;
+
+    quills.push({id:editorId, quill:quill});
 }
 
 // Sterge bloc
-function deleteBlock(btn){ btn.parentElement.remove(); }
-
-// Executa format
-function execCmd(command){
-    if(activeEditor){
-        activeEditor.focus();
-        document.execCommand(command,false,null);
-    }
-}
-
-// Color picker
-function execCmdColor(color){
-    if(activeEditor){
-        activeEditor.focus();
-        document.execCommand('foreColor', false, color);
-    }
-}
-
-// Insert HTML
-function insertHTML(html){
-    if(activeEditor){
-        activeEditor.focus();
-        document.execCommand('insertHTML', false, html);
-    }
+function deleteBlock(btn){
+    let block = btn.parentElement;
+    // Sterge Quill din array
+    quills = quills.filter(q => !block.contains(document.getElementById(q.id)));
+    block.remove();
 }
 
 // Salvare articole
 function save(){
-    let data=[];
-    document.querySelectorAll("#dropzone .block").forEach(b=>{
-        let html = b.querySelector(".editor").innerHTML;
-        data.push({html:html});
+    let data = [];
+    quills.forEach(q=>{
+        let html = q.quill.root.innerHTML;
+        data.push({html: html});
     });
 
-    let form=document.createElement("form");
-    form.method="POST";
-    form.action="/save";
+    let form = document.createElement("form");
+    form.method = "POST";
+    form.action = "/save";
 
-    let input=document.createElement("input");
-    input.type="hidden";
-    input.name="data";
-    input.value=JSON.stringify(data);
+    let input = document.createElement("input");
+    input.type = "hidden";
+    input.name = "data";
+    input.value = JSON.stringify(data);
 
     form.appendChild(input);
     document.body.appendChild(form);
