@@ -1,19 +1,35 @@
 <!DOCTYPE html>
-<html lang="ro">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Upload Articol</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <title>Upload PDF - PDF Medical Site</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+        h1 { color:#222; }
+        a { text-decoration:none; color:#007bff; font-weight:bold; }
+        .container { max-width: 600px; margin:auto; background:#fff; padding:30px; border-radius:8px; box-shadow:0 0 10px rgba(0,0,0,0.1);}
+        input[type="file"] { display:block; margin-bottom:15px; }
+        button { padding:10px 20px; background:#007bff; color:white; border:none; border-radius:4px; cursor:pointer; }
+        .links { margin-top:20px; }
+    </style>
 </head>
 <body>
+
+<div class="container">
     <h1>Upload PDF</h1>
-    <form method="post" enctype="multipart/form-data">
-        <input type="file" name="pdf">
-        <button type="submit">Upload</button>
+    <p>Alege fișierul PDF pe care vrei să-l procesezi:</p>
+
+    <!-- Formular care deschide articolul generat într-un tab nou -->
+    <form action="/upload" method="POST" enctype="multipart/form-data" target="_blank">
+        <input type="file" name="pdf_file" required>
+        <button type="submit">Upload PDF</button>
     </form>
 
-    <br>
-    <a href="/">Înapoi</a>
+    <div class="links">
+        <p>
+            <a href="/articles" target="_blank">Vezi articolele generate</a>
+        </p>
+    </div>
+</div>
+
 </body>
 </html>
