@@ -1,18 +1,19 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>Builder simplificat</title>
+<title>Builder Rich Text</title>
 
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 
 <style>
-/* ───────── BODY & LAYOUT ───────── */
 body {
     margin:0;
     font-family: Georgia, serif;
     background:#f5f5f5;
+    color:#222;
 }
 
+/* Layout Editor */
 .editor-layout {
     display:flex;
     height:100vh;
@@ -47,7 +48,7 @@ body {
     padding:10px;
     margin-bottom:20px;
     background:#fff;
-    position: relative; /* pentru butonul X */
+    position: relative;
 }
 
 /* Buton stergere */
@@ -60,6 +61,15 @@ body {
     border:none;
     border-radius:3px;
     padding:2px 6px;
+    cursor:pointer;
+}
+
+/* Toolbar */
+.toolbar {
+    margin-bottom:5px;
+}
+.toolbar button, .toolbar input[type="color"] {
+    margin-right:5px;
     cursor:pointer;
 }
 
@@ -125,20 +135,26 @@ body {
 </div>
 
 <script>
+// Drag & drop
 let dropzone = document.getElementById("dropzone");
+new Sortable(dropzone, { animation:150 });
 
-// Drag & drop cu Sortable.js
-new Sortable(dropzone, {
-    animation:150
-});
-
-// Adauga bloc in canvas
+// Adauga bloc
 function addBlock(text){
     let div = document.createElement("div");
     div.className = "block";
 
     div.innerHTML = `
         <button class="delete-btn" onclick="deleteBlock(this)">X</button>
+        <div class="toolbar">
+            <button onclick="cmd(event,'bold')"><b>B</b></button>
+            <button onclick="cmd(event,'italic')"><i>I</i></button>
+            <button onclick="cmd(event,'underline')"><u>U</u></button>
+            <button onclick="cmd(event,'superscript')">X²</button>
+            <input type="color" onchange="cmdColor(event)" title="Culoare text">
+            <button onclick="cmd(event,'insertHTML','<br>')">Enter</button>
+            <button onclick="cmd(event,'insertHTML','&nbsp;&nbsp;&nbsp;&nbsp;')">Tab</button>
+        </div>
         <div contenteditable="true" class="editor">${text}</div>
     `;
 
@@ -150,22 +166,34 @@ function deleteBlock(btn){
     btn.parentElement.remove();
 }
 
+// Comenzi toolbar
+function cmd(e, command, value=null){
+    e.preventDefault();
+    document.execCommand(command, false, value);
+}
+
+// Color picker
+function cmdColor(e){
+    const color = e.target.value;
+    document.execCommand('foreColor', false, color);
+}
+
 // Salvare articole
 function save(){
     let data=[];
     document.querySelectorAll("#dropzone .block").forEach(b=>{
-        let html=b.querySelector(".editor").innerHTML;
+        let html = b.querySelector(".editor").innerHTML;
         data.push({html:html});
     });
 
-    let form=document.createElement("form");
-    form.method="POST";
-    form.action="/save";
+    let form = document.createElement("form");
+    form.method = "POST";
+    form.action = "/save";
 
-    let input=document.createElement("input");
-    input.type="hidden";
-    input.name="data";
-    input.value=JSON.stringify(data);
+    let input = document.createElement("input");
+    input.type = "hidden";
+    input.name = "data";
+    input.value = JSON.stringify(data);
 
     form.appendChild(input);
     document.body.appendChild(form);
