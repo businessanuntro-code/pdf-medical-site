@@ -62,6 +62,8 @@ def extract_blocks(file_stream):
     return blocks
 
 # ---------------- ROUTES ----------------
+
+# 🔥 Upload → CALIBRARE
 @app.route("/", methods=["GET", "POST"])
 def upload():
     if request.method == "POST":
@@ -75,7 +77,7 @@ def upload():
         with open("blocks.json", "w") as f:
             json.dump(blocks, f)
 
-        return render_template("builder.html", blocks=blocks)
+        return render_template("calibrate.html", blocks=blocks)
 
     return """
     <h2>Upload PDF</h2>
@@ -85,7 +87,20 @@ def upload():
     </form>
     """
 
-# 🔥 Builder (RE-EDITARE)
+# 🔥 Calibrare → Builder
+@app.route("/to_builder", methods=["POST"])
+def to_builder():
+    selections = request.form.to_dict()
+
+    with open("mapping.json", "w") as f:
+        json.dump(selections, f)
+
+    with open("blocks.json") as f:
+        blocks = json.load(f)
+
+    return render_template("builder.html", blocks=blocks)
+
+# 🔥 Builder (re-editare)
 @app.route("/builder")
 def builder():
     blocks = []
@@ -154,7 +169,7 @@ def save():
 
     return redirect(f"/view/{slug}")
 
-# 🔥 VIEW ARTICOL
+# 🔥 VIEW
 @app.route("/view/<slug>")
 def view(slug):
     conn = sqlite3.connect("db.sqlite")
