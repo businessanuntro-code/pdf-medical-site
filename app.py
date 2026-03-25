@@ -85,49 +85,13 @@ def upload():
     </form>
     """
 
-@app.route("/builder")
-def builder():
-    try:
-        conn = sqlite3.connect("db.sqlite")
-        cur = conn.cursor()
-        cur.execute("SELECT structura FROM templates ORDER BY id DESC LIMIT 1")
-        data = json.loads(cur.fetchone()[0])
-        conn.close()
-
-        blocks = [{"text": b["html"]} for b in data]
-
-    except:
-        with open("blocks.json") as f:
-            blocks = json.load(f)
-
-    return render_template("builder.html", blocks=blocks)
-
 @app.route("/save", methods=["POST"])
 def save():
     data = json.loads(request.form["data"])
 
     html = ""
-
-    for i, b in enumerate(data):
-        text = b["html"]
-
-        if i == 0:
-            html += f"<h1 class='title'>{text}</h1>"
-
-        elif i == 1:
-            html += f"<div class='authors'>{text}</div>"
-
-        elif "abstract" in text.lower():
-            html += f"<h2 class='section-title'>{text}</h2>"
-
-        elif "keywords" in text.lower():
-            html += f"<div class='keywords'>{text}</div>"
-
-        elif "rezumat" in text.lower():
-            html += f"<h2 class='section-title'>{text}</h2>"
-
-        else:
-            html += f"<p>{text}</p>"
+    for b in data:
+        html += f"<div>{b['html']}</div>"
 
     slug = str(int(datetime.now().timestamp()))
 
@@ -153,25 +117,7 @@ def view(slug):
 
     conn.close()
 
-    return f"""
-    <html>
-    <head>
-        <link rel="stylesheet" href="/static/style.css">
-    </head>
-    <body>
-
-    <div class="topbar">
-        <a href="/">⬅ Upload</a>
-        <a href="/builder">✏️ Editează</a>
-    </div>
-
-    <div class="container">
-        {html}
-    </div>
-
-    </body>
-    </html>
-    """
+    return f"<div style='max-width:800px;margin:auto'>{html}</div>"
 
 # ---------------- RUN ----------------
 if __name__ == "__main__":
