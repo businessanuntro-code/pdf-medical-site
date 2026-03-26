@@ -1,136 +1,84 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>Mapper PDF</title>
-
-<style>
-body { display:flex; margin:0; font-family:Arial; }
-#left { width:70%; position:relative; background:#222; }
-#right { width:30%; padding:15px; background:#f5f5f5; overflow:auto; }
-canvas { border:1px solid #000; cursor:crosshair; display:block; margin:auto; background:white; }
-.zone { border:1px solid #ccc; padding:5px; margin-bottom:5px; background:white; }
-.coords { font-size:12px; color:#666; }
-button { margin-top:10px; padding:8px; width:100%; cursor:pointer; }
-</style>
-
+    <title>Mapper PDF</title>
+    <style>
+        body { margin:0; font-family: Arial; }
+        #pdf-container { width:80%; height:90vh; margin:auto; border:1px solid #ccc; position:relative; }
+        canvas { border:1px solid #999; display:block; margin:auto; }
+        .selection { border:2px dashed red; position:absolute; pointer-events:none; }
+        button { margin:10px; padding:10px; background:#007bff; color:white; border:none; cursor:pointer; border-radius:4px; }
+    </style>
 </head>
 <body>
 
-<div id="left">
-    <canvas id="pdfCanvas"></canvas>
+<h2 style="text-align:center">Mapper - Selectează zone PDF</h2>
+<div id="pdf-container"></div>
+<div style="text-align:center;">
+    <button onclick="saveTemplate()">Salvează coordonate</button>
+    <a href="/generate" target="_blank"><button>Generează articol</button></a>
 </div>
 
-<div id="right">
-
-<h3>Selectează zonă</h3>
-<select id="type">
-<option value="title">Titlu</option>
-<option value="authors">Autori</option>
-<option value="abstract">Abstract</option>
-<option value="keywords">Keywords</option>
-<option value="rezumat">Rezumat</option>
-<option value="cuvinte_cheie">Cuvinte cheie</option>
-<option value="body">Body</option>
-<option value="bibliografie">Bibliografie</option>
-</select>
-
-<button onclick="save()">💾 Salvează template</button>
-<button onclick="generate()">➡️ Generează articol</button>
-
-<h3>Zone</h3>
-<div id="zones"></div>
-
-</div>
-
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
-
+<!-- PDF.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.10.100/pdf.min.js"></script>
 <script>
-let url = "{{ pdf_url }}";
-let canvas = document.getElementById("pdfCanvas");
-let ctx = canvas.getContext("2d");
-let pdfDoc = null;
-let scale = 1.5;
-let zones = [];
+const pdf_url = "{{ pdf_url }}";
+const container = document.getElementById("pdf-container");
+let template_data = [];
 
-let startX, startY, drawing=false;
+let startX, startY, rectEl;
 
-// Load PDF
-pdfjsLib.getDocument(url).promise.then(pdf=>{
-    pdfDoc = pdf;
-    pdf.getPage(1).then(page=>{
-        let viewport = page.getViewport({scale:scale});
+// Încarcă PDF
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.10.100/pdf.worker.min.js";
+pdfjsLib.getDocument(pdf_url).promise.then(pdf => {
+    pdf.getPage(1).then(page => {
+        const viewport = page.getViewport({scale:1.5});
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
         canvas.width = viewport.width;
         canvas.height = viewport.height;
-        renderPage(page);
+        container.appendChild(canvas);
+        page.render({canvasContext: ctx, viewport: viewport});
+        
+        // Mouse pentru selectare coordonate
+        canvas.addEventListener("mousedown", e=>{
+            startX = e.offsetX;
+            startY = e.offsetY;
+            rectEl = document.createElement("div");
+            rectEl.className = "selection";
+            rectEl.style.left = startX+"px";
+            rectEl.style.top = startY+"px";
+            rectEl.style.width = "0px";
+            rectEl.style.height = "0px";
+            container.appendChild(rectEl);
+        });
+
+        canvas.addEventListener("mousemove", e=>{
+            if(rectEl){
+                rectEl.style.width = (e.offsetX - startX)+"px";
+                rectEl.style.height = (e.offsetY - startY)+"px";
+            }
+        });
+
+        canvas.addEventListener("mouseup", e=>{
+            if(rectEl){
+                const x0 = startX, y0 = startY;
+                const x1 = e.offsetX, y1 = e.offsetY;
+                let type = prompt("Tipul zonei (ex: title, abstract, keywords):");
+                template_data.push({x0,y0,x1,y1,type});
+                rectEl = null;
+            }
+        });
     });
 });
 
-// Render page
-function renderPage(page){
-    let viewport = page.getViewport({scale:scale});
-    page.render({canvasContext: ctx, viewport: viewport}).promise.then(drawZones);
+function saveTemplate(){
+    fetch("/save_template", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify(template_data)
+    }).then(r=>r.text()).then(alert);
 }
-
-// Draw zones
-function drawZones(){
-    ctx.strokeStyle="red";
-    ctx.lineWidth=2;
-    zones.forEach(z=>{
-        ctx.strokeRect(z.x0*scale, z.y0*scale, (z.x1-z.x0)*scale, (z.y1-z.y0)*scale);
-    });
-}
-
-// Mouse events
-canvas.onmousedown = e=>{
-    startX = e.offsetX;
-    startY = e.offsetY;
-    drawing = true;
-};
-canvas.onmouseup = e=>{
-    if(!drawing) return;
-    let endX = e.offsetX;
-    let endY = e.offsetY;
-    drawing=false;
-    zones.push({
-        type: document.getElementById("type").value,
-        x0: Math.min(startX,endX)/scale,
-        y0: Math.min(startY,endY)/scale,
-        x1: Math.max(startX,endX)/scale,
-        y1: Math.max(startY,endY)/scale
-    });
-    reload();
-};
-
-// Redraw
-function reload(){
-    pdfDoc.getPage(1).then(page=>renderPage(page));
-    renderZonesList();
-}
-
-// Zones list UI
-function renderZonesList(){
-    let div=document.getElementById("zones");
-    div.innerHTML="";
-    zones.forEach((z,i)=>{
-        div.innerHTML+=`<div class="zone"><b>${z.type}</b><br>
-        <div class="coords">(${Math.round(z.x0)},${Math.round(z.y0)})→(${Math.round(z.x1)},${Math.round(z.y1)})</div>
-        <button onclick="removeZone(${i})">Șterge</button></div>`;
-    });
-}
-
-// Delete
-function removeZone(i){ zones.splice(i,1); reload(); }
-
-// Save template (server memory)
-function save(){
-    fetch("/save_template",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(zones)})
-    .then(()=>alert("Template salvat!"));
-}
-
-// Generate article (opens same tab)
-function generate(){ window.open("/generate","_blank"); }
-
 </script>
-
 </body>
 </html>
