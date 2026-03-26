@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>PDF Zone Mapper</title>
+
+    <style>
+        body { font-family: Arial; margin:0; display:flex; }
+        #left { width:70%; position:relative; }
+        #right { width:30%; padding:10px; border-left:1px solid #ccc; }
+
+        canvas {
+            border:1px solid #000;
+            cursor:crosshair;
+        }
+
+        .zone {
+            margin-bottom:10px;
+            padding:5px;
+            border:1px solid #ccc;
+        }
+    </style>
+</head>
+<body>
+
+<div id="left">
+    <canvas id="pdfCanvas"></canvas>
+</div>
+
+<div id="right">
+    <h3>Zone definite</h3>
+    <div id="zones"></div>
+
+    <select id="zoneType">
+        <option value="title">Titlu</option>
+        <option value="authors">Autori</option>
+        <option value="abstract">Abstract</option>
+        <option value="keywords">Keywords</option>
+        <option value="rezumat">Rezumat</option>
+        <option value="cuvinte_cheie">Cuvinte cheie</option>
+        <option value="body">Body</option>
+        <option value="bibliografie">Bibliografie</option>
+    </select>
+
+    <button onclick="saveZones()">💾 Save Zones</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+
+<script>
+let url = "{{ pdf_url }}";
+
+let canvas = document.getElementById('pdfCanvas');
+let ctx = canvas.getContext('2d');
+
+let startX, startY, endX, endY;
+let drawing = false;
+
+let zones = [];
+
+pdfjsLib.getDocument(url).promise.then(function(pdf){
+    pdf.getPage(1).then(function(page){
+        let viewport = page.getViewport({scale:1.5});
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
+
+        page.render({
+            canvasContext: ctx,
+            viewport: viewport
+        });
+    });
+});
+
+// Mouse events
+canvas.onmousedown = function(e){
+    startX = e.offsetX;
+    startY = e.offsetY;
+    drawing = true;
+};
+
+canvas.onmouseup = function(e){
+    endX = e.offsetX;
+    endY = e.offsetY;
+    drawing = false;
+
+    let type = document.getElementById("zoneType").value;
+
+    let zone = {
+        type: type,
+        x0: startX,
+        y0: startY,
+        x1: endX,
+        y1: endY
+    };
+
+    zones.push(zone);
+    drawZones();
+    renderList();
+};
+
+function drawZones(){
+    ctx.strokeStyle = "red";
+    ctx.lineWidth = 2;
+
+    zones.forEach(z=>{
+        ctx.strokeRect(z.x0, z.y0, z.x1-z.x0, z.y1-z.y0);
+    });
+}
+
+function renderList(){
+    let div = document.getElementById("zones");
+    div.innerHTML = "";
+
+    zones.forEach(z=>{
+        div.innerHTML += `
+            <div class="zone">
+                <b>${z.type}</b><br>
+                (${Math.round(z.x0)},${Math.round(z.y0)}) → (${Math.round(z.x1)},${Math.round(z.y1)})
+            </div>
+        `;
+    });
+}
+
+function saveZones(){
+    fetch("/save_zones", {
+        method:"POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify(zones)
+    }).then(()=>alert("Salvat!"));
+}
+</script>
+
+</body>
+</html>
