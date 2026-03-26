@@ -1,18 +1,13 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>PDF Mapper PRO</title>
+<title>Mapper</title>
 
 <style>
-body { display:flex; font-family:Arial; margin:0; }
-#left { width:70%; position:relative; }
-#right { width:30%; padding:10px; border-left:1px solid #ccc; overflow:auto; }
-
-canvas { border:1px solid #000; cursor:crosshair; }
-
-.zone { border:1px solid #ccc; padding:5px; margin-bottom:5px; }
-
-.preview { background:#f5f5f5; padding:5px; margin-top:5px; font-size:12px; }
+body { display:flex; }
+#left { width:70%; }
+#right { width:30%; padding:10px; }
+canvas { border:1px solid black; }
 </style>
 </head>
 <body>
@@ -22,23 +17,21 @@ canvas { border:1px solid #000; cursor:crosshair; }
 </div>
 
 <div id="right">
-    <h3>Zone</h3>
 
-    <select id="zoneType">
-        <option value="title">Titlu</option>
-        <option value="authors">Autori</option>
-        <option value="abstract">Abstract</option>
-        <option value="keywords">Keywords</option>
-        <option value="rezumat">Rezumat</option>
-        <option value="cuvinte_cheie">Cuvinte cheie</option>
-        <option value="body">Body</option>
-        <option value="bibliografie">Bibliografie</option>
-    </select>
+<select id="type">
+<option value="title">Titlu</option>
+<option value="authors">Autori</option>
+<option value="abstract">Abstract</option>
+<option value="keywords">Keywords</option>
+<option value="body">Body</option>
+<option value="bibliografie">Bibliografie</option>
+</select>
 
-    <button onclick="saveZones()">💾 Save Template</button>
+<button onclick="save()">Save</button>
+<button onclick="generate()">➡️ Generează articol</button>
 
-    <h4>Zone definite</h4>
-    <div id="zones"></div>
+<div id="zones"></div>
+
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
@@ -46,18 +39,17 @@ canvas { border:1px solid #000; cursor:crosshair; }
 <script>
 let url = "{{ pdf_url }}";
 
-let canvas = document.getElementById('pdfCanvas');
-let ctx = canvas.getContext('2d');
+let canvas = document.getElementById("pdfCanvas");
+let ctx = canvas.getContext("2d");
 
-let startX, startY;
 let zones = [];
+let startX, startY;
 
 pdfjsLib.getDocument(url).promise.then(pdf=>{
     pdf.getPage(1).then(page=>{
         let viewport = page.getViewport({scale:1.5});
         canvas.height = viewport.height;
         canvas.width = viewport.width;
-
         page.render({canvasContext:ctx, viewport:viewport});
     });
 });
@@ -68,48 +60,35 @@ canvas.onmousedown = e=>{
 };
 
 canvas.onmouseup = e=>{
-    let endX = e.offsetX;
-    let endY = e.offsetY;
+    let z = {
+        type: document.getElementById("type").value,
+        x0:startX,
+        y0:startY,
+        x1:e.offsetX,
+        y1:e.offsetY
+    };
 
-    let type = document.getElementById("zoneType").value;
-
-    zones.push({type, x0:startX, y0:startY, x1:endX, y1:endY});
-
-    drawZones();
-    renderZones();
+    zones.push(z);
+    draw();
 };
 
-function drawZones(){
+function draw(){
     ctx.strokeStyle="red";
-    ctx.lineWidth=2;
-
     zones.forEach(z=>{
         ctx.strokeRect(z.x0, z.y0, z.x1-z.x0, z.y1-z.y0);
     });
 }
 
-function renderZones(){
-    let div = document.getElementById("zones");
-    div.innerHTML="";
-
-    zones.forEach(z=>{
-        div.innerHTML+=`
-        <div class="zone">
-            <b>${z.type}</b><br>
-            (${Math.round(z.x0)},${Math.round(z.y0)}) → (${Math.round(z.x1)},${Math.round(z.y1)})
-        </div>`;
-    });
-}
-
-function saveZones(){
+function save(){
     fetch("/save_template", {
         method:"POST",
         headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({
-            name:"default",
-            zones:zones
-        })
-    }).then(()=>alert("Template salvat"));
+        body:JSON.stringify(zones)
+    }).then(()=>alert("salvat"));
+}
+
+function generate(){
+    window.location.href="/generate";
 }
 </script>
 
