@@ -147,3 +147,34 @@ def articles():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
+
+# ---------------- TEMPLATE ZONES ----------------
+
+@app.route("/mapper")
+def mapper():
+    return render_template("mapper.html", pdf_url="/static/sample.pdf")
+
+
+@app.route("/save_template", methods=["POST"])
+def save_template():
+    data = request.json
+
+    conn = sqlite3.connect("db.sqlite")
+    cur = conn.cursor()
+
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS templates (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT,
+        zones TEXT
+    )
+    """)
+
+    cur.execute("DELETE FROM templates WHERE name=?", (data["name"],))
+    cur.execute("INSERT INTO templates (name, zones) VALUES (?,?)",
+                (data["name"], json.dumps(data["zones"])))
+
+    conn.commit()
+    conn.close()
+
+    return "OK"
