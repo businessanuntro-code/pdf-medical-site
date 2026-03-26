@@ -1,35 +1,22 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Upload PDF - PDF Medical Site</title>
+    <title>Upload PDF</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+        body { font-family: Arial; margin: 20px; background:#f5f5f5; }
         h1 { color:#222; }
-        a { text-decoration:none; color:#007bff; font-weight:bold; }
-        .container { max-width: 600px; margin:auto; background:#fff; padding:30px; border-radius:8px; box-shadow:0 0 10px rgba(0,0,0,0.1);}
+        .container { max-width:600px; margin:auto; background:#fff; padding:30px; border-radius:8px; box-shadow:0 0 10px rgba(0,0,0,0.1);}
         input[type="file"] { display:block; margin-bottom:15px; }
         button { padding:10px 20px; background:#007bff; color:white; border:none; border-radius:4px; cursor:pointer; }
-        .links { margin-top:20px; }
     </style>
 </head>
 <body>
-
 <div class="container">
     <h1>Upload PDF</h1>
-    <p>Alege fișierul PDF pe care vrei să-l procesezi:</p>
-
-    <!-- Formular care deschide articolul generat într-un tab nou -->
-    <form action="/upload" method="POST" enctype="multipart/form-data" target="_blank">
+    <form action="/upload" method="POST" enctype="multipart/form-data">
         <input type="file" name="pdf_file" required>
         <button type="submit">Upload PDF</button>
     </form>
-
-    <div class="links">
-        <p>
-            <a href="/articles" target="_blank">Vezi articolele generate</a>
-        </p>
-    </div>
 </div>
-
 </body>
 </html>
