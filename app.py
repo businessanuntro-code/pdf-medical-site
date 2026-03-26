@@ -1,5 +1,6 @@
 from flask import Flask, request, render_template, redirect, session, url_for, send_from_directory
 import os
+import fitz  # PyMuPDF
 
 app = Flask(__name__)
 app.secret_key = "supersecret"
@@ -22,14 +23,14 @@ def upload():
         if not file:
             return "❌ Nu ați selectat PDF"
         path = os.path.join(UPLOAD_FOLDER, file.filename)
-        file.save(path)  # ⚡ Salvează fișierul în uploads/
+        file.save(path)  # Salvează PDF-ul în uploads/
         session["pdf_filename"] = file.filename
         return redirect(url_for("mapper"))
     return render_template("upload.html")
 
 @app.route("/uploads/<filename>")
 def uploaded_file(filename):
-    # Servește PDF-ul salvat pentru PDF.js
+    # Servește PDF-ul pentru mapper
     return send_from_directory(UPLOAD_FOLDER, filename)
 
 @app.route("/mapper")
@@ -38,13 +39,14 @@ def mapper():
     if not filename:
         return redirect(url_for("upload"))
     pdf_url = url_for('uploaded_file', filename=filename)
+    # Tipurile de câmpuri pentru template
     field_types = ["title_ro", "title_en", "authors", "abstract", "keywords", "body", "bibliography"]
     return render_template("mapper.html", pdf_url=pdf_url, field_types=field_types)
 
 @app.route("/save_template", methods=["POST"])
 def save_template():
     global template_data
-    template_data = request.json
+    template_data = request.json  # JSON cu coordonate și tip câmp
     return "ok"
 
 @app.route("/generate")
@@ -54,12 +56,11 @@ def generate():
         return "❌ Nu există PDF încărcat"
     path = os.path.join(UPLOAD_FOLDER, filename)
 
-    # Extrage text din zonele selectate (folosind fitz / PyMuPDF)
-    import fitz
     doc = fitz.open(path)
     page = doc[0]
     result = {}
 
+    # Extrage text din coordonatele salvate
     for z in template_data:
         rect = fitz.Rect(z["x0"], z["y0"], z["x1"], z["y1"])
         text = page.get_textbox(rect)
@@ -69,7 +70,7 @@ def generate():
     if not result:
         result["body"] = page.get_text()
 
-    # Returnează articolul generat
+    # Generează articol HTML
     html = ""
     for k, v in result.items():
         html += f"<h3>{k}</h3><p>{v}</p>"
