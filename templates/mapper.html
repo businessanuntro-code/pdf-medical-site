@@ -1,14 +1,56 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>Mapper</title>
+<title>Mapper PDF</title>
 
 <style>
-body { display:flex; }
-#left { width:70%; }
-#right { width:30%; padding:10px; }
-canvas { border:1px solid black; }
+body {
+    display:flex;
+    margin:0;
+    font-family:Arial;
+}
+
+#left {
+    width:70%;
+    position:relative;
+    background:#222;
+}
+
+#right {
+    width:30%;
+    padding:15px;
+    background:#f5f5f5;
+    overflow:auto;
+}
+
+canvas {
+    border:1px solid #000;
+    cursor:crosshair;
+    display:block;
+    margin:auto;
+    background:white;
+}
+
+.zone {
+    border:1px solid #ccc;
+    padding:5px;
+    margin-bottom:5px;
+    background:white;
+}
+
+.coords {
+    font-size:12px;
+    color:#666;
+}
+
+button {
+    margin-top:10px;
+    padding:8px;
+    width:100%;
+    cursor:pointer;
+}
 </style>
+
 </head>
 <body>
 
@@ -18,18 +60,23 @@ canvas { border:1px solid black; }
 
 <div id="right">
 
+<h3>Selectează zonă</h3>
+
 <select id="type">
 <option value="title">Titlu</option>
 <option value="authors">Autori</option>
 <option value="abstract">Abstract</option>
 <option value="keywords">Keywords</option>
+<option value="rezumat">Rezumat</option>
+<option value="cuvinte_cheie">Cuvinte cheie</option>
 <option value="body">Body</option>
 <option value="bibliografie">Bibliografie</option>
 </select>
 
-<button onclick="save()">Save</button>
+<button onclick="save()">💾 Salvează template</button>
 <button onclick="generate()">➡️ Generează articol</button>
 
+<h3>Zone</h3>
 <div id="zones"></div>
 
 </div>
@@ -42,51 +89,122 @@ let url = "{{ pdf_url }}";
 let canvas = document.getElementById("pdfCanvas");
 let ctx = canvas.getContext("2d");
 
-let zones = [];
-let startX, startY;
+let pdfDoc = null;
+let scale = 1.5;
 
+let zones = [];
+
+let startX, startY;
+let drawing = false;
+
+// 🔥 LOAD PDF
 pdfjsLib.getDocument(url).promise.then(pdf=>{
+    pdfDoc = pdf;
+
     pdf.getPage(1).then(page=>{
-        let viewport = page.getViewport({scale:1.5});
-        canvas.height = viewport.height;
+        let viewport = page.getViewport({scale:scale});
         canvas.width = viewport.width;
-        page.render({canvasContext:ctx, viewport:viewport});
+        canvas.height = viewport.height;
+
+        renderPage(page);
     });
 });
 
-canvas.onmousedown = e=>{
-    startX = e.offsetX;
-    startY = e.offsetY;
-};
+// 🔥 RENDER PAGE
+function renderPage(page){
+    let viewport = page.getViewport({scale:scale});
 
-canvas.onmouseup = e=>{
-    let z = {
-        type: document.getElementById("type").value,
-        x0:startX,
-        y0:startY,
-        x1:e.offsetX,
-        y1:e.offsetY
-    };
-
-    zones.push(z);
-    draw();
-};
-
-function draw(){
-    ctx.strokeStyle="red";
-    zones.forEach(z=>{
-        ctx.strokeRect(z.x0, z.y0, z.x1-z.x0, z.y1-z.y0);
+    page.render({
+        canvasContext: ctx,
+        viewport: viewport
+    }).promise.then(()=>{
+        drawZones();
     });
 }
 
+// 🔥 DRAW ZONES
+function drawZones(){
+    ctx.strokeStyle="red";
+    ctx.lineWidth=2;
+
+    zones.forEach(z=>{
+        ctx.strokeRect(z.x0, z.y0, z.x1 - z.x0, z.y1 - z.y0);
+    });
+}
+
+// 🔥 MOUSE EVENTS
+canvas.onmousedown = e=>{
+    startX = e.offsetX;
+    startY = e.offsetY;
+    drawing = true;
+};
+
+canvas.onmouseup = e=>{
+    if(!drawing) return;
+
+    let endX = e.offsetX;
+    let endY = e.offsetY;
+
+    drawing = false;
+
+    let z = {
+        type: document.getElementById("type").value,
+        x0: Math.min(startX, endX),
+        y0: Math.min(startY, endY),
+        x1: Math.max(startX, endX),
+        y1: Math.max(startY, endY)
+    };
+
+    zones.push(z);
+
+    reload();
+};
+
+// 🔥 REDRAW EVERYTHING
+function reload(){
+    pdfDoc.getPage(1).then(page=>{
+        renderPage(page);
+        renderZonesList();
+    });
+}
+
+// 🔥 LIST UI
+function renderZonesList(){
+    let div = document.getElementById("zones");
+    div.innerHTML = "";
+
+    zones.forEach((z,i)=>{
+        div.innerHTML += `
+        <div class="zone">
+            <b>${z.type}</b><br>
+            <div class="coords">
+            (${Math.round(z.x0)}, ${Math.round(z.y0)}) →
+            (${Math.round(z.x1)}, ${Math.round(z.y1)})
+            </div>
+            <button onclick="removeZone(${i})">Șterge</button>
+        </div>
+        `;
+    });
+}
+
+// 🔥 DELETE
+function removeZone(i){
+    zones.splice(i,1);
+    reload();
+}
+
+// 🔥 SAVE TEMPLATE
 function save(){
     fetch("/save_template", {
         method:"POST",
         headers:{"Content-Type":"application/json"},
         body:JSON.stringify(zones)
-    }).then(()=>alert("salvat"));
+    }).then(()=>{
+        alert("Template salvat!");
+    });
 }
 
+// 🔥 GENERATE
 function generate(){
     window.location.href="/generate";
 }
