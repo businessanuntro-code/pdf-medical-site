@@ -8,6 +8,7 @@
         canvas { border:1px solid #999; display:block; margin:auto; }
         .selection { border:2px dashed red; position:absolute; pointer-events:none; }
         button { margin:10px; padding:10px; background:#007bff; color:white; border:none; cursor:pointer; border-radius:4px; }
+        select { position:absolute; z-index:10; }
     </style>
 </head>
 <body>
@@ -25,11 +26,13 @@
 const pdf_url = "{{ pdf_url }}";
 const container = document.getElementById("pdf-container");
 let template_data = [];
+let field_types = {{ field_types|tojson }};
 
-let startX, startY, rectEl;
+let startX, startY, rectEl, typeSelect;
 
 // Încarcă PDF
 pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.10.100/pdf.worker.min.js";
+
 pdfjsLib.getDocument(pdf_url).promise.then(pdf => {
     pdf.getPage(1).then(page => {
         const viewport = page.getViewport({scale:1.5});
@@ -39,8 +42,7 @@ pdfjsLib.getDocument(pdf_url).promise.then(pdf => {
         canvas.height = viewport.height;
         container.appendChild(canvas);
         page.render({canvasContext: ctx, viewport: viewport});
-        
-        // Mouse pentru selectare coordonate
+
         canvas.addEventListener("mousedown", e=>{
             startX = e.offsetX;
             startY = e.offsetY;
@@ -51,6 +53,16 @@ pdfjsLib.getDocument(pdf_url).promise.then(pdf => {
             rectEl.style.width = "0px";
             rectEl.style.height = "0px";
             container.appendChild(rectEl);
+
+            typeSelect = document.createElement("select");
+            field_types.forEach(f=>{
+                let opt = document.createElement("option");
+                opt.value = f; opt.text = f;
+                typeSelect.appendChild(opt);
+            });
+            typeSelect.style.left = startX + "px";
+            typeSelect.style.top = (startY - 30) + "px";
+            container.appendChild(typeSelect);
         });
 
         canvas.addEventListener("mousemove", e=>{
@@ -61,12 +73,14 @@ pdfjsLib.getDocument(pdf_url).promise.then(pdf => {
         });
 
         canvas.addEventListener("mouseup", e=>{
-            if(rectEl){
-                const x0 = startX, y0 = startY;
-                const x1 = e.offsetX, y1 = e.offsetY;
-                let type = prompt("Tipul zonei (ex: title, abstract, keywords):");
+            if(rectEl && typeSelect){
+                let x0 = startX, y0 = startY;
+                let x1 = e.offsetX, y1 = e.offsetY;
+                let type = typeSelect.value;
                 template_data.push({x0,y0,x1,y1,type});
                 rectEl = null;
+                typeSelect.remove();
+                typeSelect = null;
             }
         });
     });
