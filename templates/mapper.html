@@ -2,115 +2,80 @@
 <html>
 <head>
     <title>Mapper PDF</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.5.141/pdf.min.js"></script>
     <style>
         body { font-family: Arial; margin: 20px; }
-        #pdf-container { position: relative; border:1px solid #ccc; }
-        canvas { display: block; margin: auto; border:1px solid #000; }
-        .zone { position:absolute; border:2px dashed red; pointer-events:none; }
-        #controls { margin-top:10px; }
-        select, button { margin-right:10px; }
+        #pdf-canvas { border:1px solid #ccc; width:100%; }
+        .overlay { position:absolute; border:2px dashed red; pointer-events:none; }
+        #canvas-container { position:relative; }
+        select, button { margin:5px 0; }
     </style>
 </head>
 <body>
 
-<h2>Mapper PDF</h2>
+<h1>Mapper PDF</h1>
 
-<div id="pdf-container"></div>
-
-<div id="controls">
-    <select id="zone-type">
-        {% for t in field_types %}
-        <option value="{{ t }}">{{ t }}</option>
+<div>
+    <label>Alege tip câmp:</label>
+    <select id="field-type">
+        {% for f in field_types %}
+            <option value="{{f}}">{{f}}</option>
         {% endfor %}
     </select>
-    <button onclick="saveZones()">💾 Salvează coordonate</button>
-    <button onclick="generateArticle()">📝 Generează articol</button>
+    <button onclick="saveTemplate()">Salvează Template</button>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.338/pdf.min.js"></script>
+<div id="canvas-container">
+    <canvas id="pdf-canvas"></canvas>
+</div>
 
 <script>
-const url = "{{ pdf_url }}";
-const pdfContainer = document.getElementById("pdf-container");
-let pdfDoc = null;
-let scale = 1.5;
-let zones = [];
+let pdfUrl = "{{ pdf_url }}";
+let canvas = document.getElementById('pdf-canvas');
+let ctx = canvas.getContext('2d');
+let template = [];
 
-// Load PDF
-pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.338/pdf.worker.min.js";
-pdfjsLib.getDocument(url).promise.then(function(pdf) {
-    pdfDoc = pdf;
-    renderPage(1);
-});
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.5.141/pdf.worker.min.js';
 
-// Render a page
-function renderPage(num) {
-    pdfDoc.getPage(num).then(function(page) {
-        const viewport = page.getViewport({ scale: scale });
-        const canvas = document.createElement("canvas");
-        const ctx = canvas.getContext("2d");
+pdfjsLib.getDocument(pdfUrl).promise.then(pdf => {
+    pdf.getPage(1).then(page => {
+        let viewport = page.getViewport({ scale: 1.5 });
         canvas.width = viewport.width;
         canvas.height = viewport.height;
-        pdfContainer.innerHTML = "";
-        pdfContainer.appendChild(canvas);
-
-        page.render({ canvasContext: ctx, viewport: viewport }).promise.then(function(){
-            enableSelection(canvas, viewport);
-        });
+        page.render({ canvasContext: ctx, viewport: viewport });
     });
-}
+});
 
-// Enable rectangle selection
-function enableSelection(canvas, viewport) {
-    let startX, startY, rect;
-    canvas.addEventListener("mousedown", (e)=>{
-        startX = e.offsetX;
-        startY = e.offsetY;
-        rect = document.createElement("div");
-        rect.className = "zone";
-        rect.style.left = startX + "px";
-        rect.style.top = startY + "px";
-        rect.style.width = "0px";
-        rect.style.height = "0px";
-        pdfContainer.appendChild(rect);
+// Simplu click pentru coordonate (X0,Y0,X1,Y1)
+canvas.addEventListener('click', function(e){
+    let rect = canvas.getBoundingClientRect();
+    let x = e.clientX - rect.left;
+    let y = e.clientY - rect.top;
+    let w = 200; // lățimea selecției
+    let h = 50;  // înălțimea selecției
+    template.push({
+        x0: x,
+        y0: y,
+        x1: x + w,
+        y1: y + h,
+        type: document.getElementById('field-type').value
     });
-    canvas.addEventListener("mousemove", (e)=>{
-        if(!rect) return;
-        let w = e.offsetX - startX;
-        let h = e.offsetY - startY;
-        rect.style.width = Math.abs(w) + "px";
-        rect.style.height = Math.abs(h) + "px";
-        rect.style.left = (w<0? e.offsetX : startX) + "px";
-        rect.style.top = (h<0? e.offsetY : startY) + "px";
-    });
-    canvas.addEventListener("mouseup", (e)=>{
-        if(!rect) return;
-        let w = e.offsetX - startX;
-        let h = e.offsetY - startY;
-        const viewportScale = 1/scale; // convert to PDF coords
-        zones.push({
-            x0: parseFloat(rect.offsetLeft*viewportScale),
-            y0: parseFloat(rect.offsetTop*viewportScale),
-            x1: parseFloat((rect.offsetLeft+rect.offsetWidth)*viewportScale),
-            y1: parseFloat((rect.offsetTop+rect.offsetHeight)*viewportScale),
-            type: document.getElementById("zone-type").value
-        });
-        rect = null;
-    });
-}
+    // Vizualizare chenar
+    let div = document.createElement('div');
+    div.className = 'overlay';
+    div.style.left = x+'px';
+    div.style.top = y+'px';
+    div.style.width = w+'px';
+    div.style.height = h+'px';
+    document.getElementById('canvas-container').appendChild(div);
+});
 
-// Save zones to server
-function saveZones(){
-    fetch("/save_template", {
-        method:"POST",
-        headers: {"Content-Type":"application/json"},
-        body: JSON.stringify(zones)
-    }).then(res=>res.text()).then(alert);
-}
-
-// Generate article
-function generateArticle(){
-    window.open("/generate","_blank");
+function saveTemplate(){
+    fetch('/save_template', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(template)
+    }).then(r=>alert('Template salvat!'));
 }
 </script>
 
