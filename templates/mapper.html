@@ -3,96 +3,116 @@
 <head>
     <title>Mapper PDF</title>
     <style>
-        body { margin:0; font-family: Arial; }
-        #pdf-container { width:80%; height:90vh; margin:auto; border:1px solid #ccc; position:relative; }
-        canvas { border:1px solid #999; display:block; margin:auto; }
-        .selection { border:2px dashed red; position:absolute; pointer-events:none; }
-        button { margin:10px; padding:10px; background:#007bff; color:white; border:none; cursor:pointer; border-radius:4px; }
-        select { position:absolute; z-index:10; }
+        body { font-family: Arial; margin: 20px; }
+        #pdf-container { position: relative; border:1px solid #ccc; }
+        canvas { display: block; margin: auto; border:1px solid #000; }
+        .zone { position:absolute; border:2px dashed red; pointer-events:none; }
+        #controls { margin-top:10px; }
+        select, button { margin-right:10px; }
     </style>
 </head>
 <body>
 
-<h2 style="text-align:center">Mapper - Selectează zone PDF</h2>
+<h2>Mapper PDF</h2>
+
 <div id="pdf-container"></div>
-<div style="text-align:center;">
-    <button onclick="saveTemplate()">Salvează coordonate</button>
-    <a href="/generate" target="_blank"><button>Generează articol</button></a>
+
+<div id="controls">
+    <select id="zone-type">
+        {% for t in field_types %}
+        <option value="{{ t }}">{{ t }}</option>
+        {% endfor %}
+    </select>
+    <button onclick="saveZones()">💾 Salvează coordonate</button>
+    <button onclick="generateArticle()">📝 Generează articol</button>
 </div>
 
-<!-- PDF.js -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.10.100/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.338/pdf.min.js"></script>
+
 <script>
-const pdf_url = "{{ pdf_url }}";
-const container = document.getElementById("pdf-container");
-let template_data = [];
-let field_types = {{ field_types|tojson }};
+const url = "{{ pdf_url }}";
+const pdfContainer = document.getElementById("pdf-container");
+let pdfDoc = null;
+let scale = 1.5;
+let zones = [];
 
-let startX, startY, rectEl, typeSelect;
+// Load PDF
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.338/pdf.worker.min.js";
+pdfjsLib.getDocument(url).promise.then(function(pdf) {
+    pdfDoc = pdf;
+    renderPage(1);
+});
 
-// Încarcă PDF
-pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.10.100/pdf.worker.min.js";
-
-pdfjsLib.getDocument(pdf_url).promise.then(pdf => {
-    pdf.getPage(1).then(page => {
-        const viewport = page.getViewport({scale:1.5});
+// Render a page
+function renderPage(num) {
+    pdfDoc.getPage(num).then(function(page) {
+        const viewport = page.getViewport({ scale: scale });
         const canvas = document.createElement("canvas");
         const ctx = canvas.getContext("2d");
         canvas.width = viewport.width;
         canvas.height = viewport.height;
-        container.appendChild(canvas);
-        page.render({canvasContext: ctx, viewport: viewport});
+        pdfContainer.innerHTML = "";
+        pdfContainer.appendChild(canvas);
 
-        canvas.addEventListener("mousedown", e=>{
-            startX = e.offsetX;
-            startY = e.offsetY;
-            rectEl = document.createElement("div");
-            rectEl.className = "selection";
-            rectEl.style.left = startX+"px";
-            rectEl.style.top = startY+"px";
-            rectEl.style.width = "0px";
-            rectEl.style.height = "0px";
-            container.appendChild(rectEl);
-
-            typeSelect = document.createElement("select");
-            field_types.forEach(f=>{
-                let opt = document.createElement("option");
-                opt.value = f; opt.text = f;
-                typeSelect.appendChild(opt);
-            });
-            typeSelect.style.left = startX + "px";
-            typeSelect.style.top = (startY - 30) + "px";
-            container.appendChild(typeSelect);
-        });
-
-        canvas.addEventListener("mousemove", e=>{
-            if(rectEl){
-                rectEl.style.width = (e.offsetX - startX)+"px";
-                rectEl.style.height = (e.offsetY - startY)+"px";
-            }
-        });
-
-        canvas.addEventListener("mouseup", e=>{
-            if(rectEl && typeSelect){
-                let x0 = startX, y0 = startY;
-                let x1 = e.offsetX, y1 = e.offsetY;
-                let type = typeSelect.value;
-                template_data.push({x0,y0,x1,y1,type});
-                rectEl = null;
-                typeSelect.remove();
-                typeSelect = null;
-            }
+        page.render({ canvasContext: ctx, viewport: viewport }).promise.then(function(){
+            enableSelection(canvas, viewport);
         });
     });
-});
+}
 
-function saveTemplate(){
+// Enable rectangle selection
+function enableSelection(canvas, viewport) {
+    let startX, startY, rect;
+    canvas.addEventListener("mousedown", (e)=>{
+        startX = e.offsetX;
+        startY = e.offsetY;
+        rect = document.createElement("div");
+        rect.className = "zone";
+        rect.style.left = startX + "px";
+        rect.style.top = startY + "px";
+        rect.style.width = "0px";
+        rect.style.height = "0px";
+        pdfContainer.appendChild(rect);
+    });
+    canvas.addEventListener("mousemove", (e)=>{
+        if(!rect) return;
+        let w = e.offsetX - startX;
+        let h = e.offsetY - startY;
+        rect.style.width = Math.abs(w) + "px";
+        rect.style.height = Math.abs(h) + "px";
+        rect.style.left = (w<0? e.offsetX : startX) + "px";
+        rect.style.top = (h<0? e.offsetY : startY) + "px";
+    });
+    canvas.addEventListener("mouseup", (e)=>{
+        if(!rect) return;
+        let w = e.offsetX - startX;
+        let h = e.offsetY - startY;
+        const viewportScale = 1/scale; // convert to PDF coords
+        zones.push({
+            x0: parseFloat(rect.offsetLeft*viewportScale),
+            y0: parseFloat(rect.offsetTop*viewportScale),
+            x1: parseFloat((rect.offsetLeft+rect.offsetWidth)*viewportScale),
+            y1: parseFloat((rect.offsetTop+rect.offsetHeight)*viewportScale),
+            type: document.getElementById("zone-type").value
+        });
+        rect = null;
+    });
+}
+
+// Save zones to server
+function saveZones(){
     fetch("/save_template", {
         method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body: JSON.stringify(template_data)
-    }).then(r=>r.text()).then(alert);
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify(zones)
+    }).then(res=>res.text()).then(alert);
+}
+
+// Generate article
+function generateArticle(){
+    window.open("/generate","_blank");
 }
 </script>
+
 </body>
 </html>
