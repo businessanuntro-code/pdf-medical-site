@@ -1,6 +1,5 @@
 from flask import Flask, render_template, request
-import os
-import zipfile
+import os, zipfile
 from lxml import etree as ET
 import traceback
 
@@ -11,88 +10,113 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 
 # =========================
-# SAFE IDML PARSER (FIX 500)
+# EXTRACT IDML XML SAFE
 # =========================
-def parse_idml(zip_path):
-    paragraphs = []
-
+def read_xml(z, path):
     try:
-        with zipfile.ZipFile(zip_path, "r") as z:
+        return ET.fromstring(z.read(path))
+    except:
+        return None
 
-            story_files = [
-                f for f in z.namelist()
-                if f.startswith("Stories/")
-            ]
 
-            for file in story_files:
-                try:
-                    xml = z.read(file)
+# =========================
+# PARSE SPREADS (LAYOUT)
+# =========================
+def parse_spreads(z):
+    frames = []
 
+    spread_files = [f for f in z.namelist() if f.startswith("Spreads/")]
+
+    for file in spread_files:
+        root = read_xml(z, file)
+        if root is None:
+            continue
+
+        # Text Frames (layout boxes)
+        for node in root.iter():
+
+            tag = node.tag.lower()
+
+            # TEXT FRAME (IMPORTANT)
+            if "textframe" in tag:
+
+                geom = node.attrib.get("GeometricBounds", None)
+
+                if geom:
                     try:
-                        root = ET.fromstring(xml)
-                    except Exception:
-                        continue
+                        y1, x1, y2, x2 = map(float, geom.split(","))
 
-                    # PARSE PARAGRAPHS
-                    for node in root.iter():
+                        frames.append({
+                            "type": "frame",
+                            "x": x1,
+                            "y": y1,
+                            "w": x2 - x1,
+                            "h": y2 - y1,
+                            "content": ""
+                        })
+                    except:
+                        pass
 
-                        if "ParagraphStyleRange" in node.tag:
-
-                            text_parts = []
-
-                            for t in node.iter():
-                                if t.text and t.text.strip():
-                                    text_parts.append(t.text.strip())
-
-                            text = " ".join(text_parts).strip()
-
-                            if text:
-                                style = node.attrib.get("AppliedParagraphStyle", "")
-                                paragraphs.append({
-                                    "text": text,
-                                    "style": style
-                                })
-
-                except Exception as e:
-                    print("Story error:", file, str(e))
-                    continue
-
-    except Exception as e:
-        print("ZIP ERROR:", str(e))
-
-    return paragraphs
+    return frames
 
 
 # =========================
-# STYLE MAPPER
+# PARSE STORIES (TEXT)
 # =========================
-def map_style(style):
-    s = style.lower()
+def parse_stories(z):
+    texts = []
 
-    if "title" in s:
-        return "title"
-    if "author" in s:
-        return "authors"
-    if "abstract" in s:
-        return "abstract"
-    if "heading" in s:
-        return "heading"
-    if "caption" in s:
-        return "caption"
+    story_files = [f for f in z.namelist() if f.startswith("Stories/")]
 
-    return "body"
+    for file in story_files:
+        root = read_xml(z, file)
+        if root is None:
+            continue
+
+        for node in root.iter():
+
+            if "ParagraphStyleRange" in node.tag:
+
+                parts = []
+                for t in node.iter():
+                    if t.text and t.text.strip():
+                        parts.append(t.text.strip())
+
+                txt = " ".join(parts)
+
+                if txt:
+                    texts.append(txt)
+
+    return texts
 
 
 # =========================
-# HOME
+# COMBINE STORY + FRAMES
 # =========================
-@app.route("/")
-def home():
-    return render_template("home.html")
+def combine(frames, texts):
+    html = []
+
+    for i, frame in enumerate(frames):
+
+        content = texts[i] if i < len(texts) else ""
+
+        html.append(f"""
+        <div class="frame"
+             style="
+                left:{frame['x']}px;
+                top:{frame['y']}px;
+                width:{frame['w']}px;
+                height:{frame['h']}px;
+             ">
+            {content}
+        </div>
+        """)
+
+    return "\n".join(html)
 
 
 # =========================
-# UPLOAD + RENDER (NO SESSION, NO REDIRECT)
+# UPLOAD + RENDER
 # =========================
 @app.route("/upload", methods=["GET", "POST"])
 def upload():
@@ -102,34 +126,28 @@ def upload():
 
             file = request.files["idml_file"]
 
-            if not file:
-                return "No file uploaded"
-
             path = os.path.join(UPLOAD_FOLDER, file.filename)
             file.save(path)
 
-            # PARSE IDML
-            paragraphs = parse_idml(path)
+            with zipfile.ZipFile(path, "r") as z:
 
-            if not paragraphs:
-                return "No content extracted from IDML"
+                frames = parse_spreads(z)
+                texts = parse_stories(z)
 
-            html = []
+                html = combine(frames, texts)
 
-            for p in paragraphs:
-                cls = map_style(p["style"])
-                html.append(f'<div class="{cls}">{p["text"]}</div>')
+            return render_template("article.html", content=html)
 
-            return render_template(
-                "article.html",
-                content="\n".join(html)
-            )
-
-        return render_template("upload.html")
+        return """
+        <form method="POST" enctype="multipart/form-data">
+            <input type="file" name="idml_file">
+            <button type="submit">Upload IDML</button>
+        </form>
+        """
 
     except Exception:
         print(traceback.format_exc())
-        return "SERVER ERROR (check logs)"
+        return "ERROR - check logs"
 
 
 if __name__ == "__main__":
