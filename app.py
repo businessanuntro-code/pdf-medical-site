@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request
-import os, zipfile
+import os
+import zipfile
 from lxml import etree as ET
 import traceback
 
@@ -9,82 +10,197 @@ UPLOAD_FOLDER = os.path.join(os.getcwd(), "uploads")
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 
-def safe(xml_bytes):
+# =========================
+# SAFE XML PARSER
+# =========================
+def safe_xml(data):
     try:
-        return ET.fromstring(xml_bytes)
+        return ET.fromstring(data)
     except:
         return None
 
 
 # =========================
-# DETECT TYPE OF IDML
+# EXTRACT STORIES (fallback content)
 # =========================
-def detect_layout(zip_file):
-    for f in zip_file.namelist():
-        if "Spreads" in f:
-            xml = safe(zip_file.read(f))
-            if xml is None:
-                continue
+def extract_stories(z):
+    stories = []
 
-            for n in xml.iter():
-                if "TextFrame" in n.tag:
-                    return True
-    return False
-
-
-# =========================
-# STRUCTURED MODE (SAFE FALLBACK)
-# =========================
-def extract_structured(zip_file):
-    articles = []
-
-    for f in zip_file.namelist():
+    for f in z.namelist():
         if not f.startswith("Stories/"):
             continue
 
-        xml = safe(zip_file.read(f))
+        xml = safe_xml(z.read(f))
         if xml is None:
             continue
 
         buffer = []
 
-        for n in xml.iter():
-            if n.text and n.text.strip():
-                txt = n.text.strip()
+        for node in xml.iter():
+            if node.text and node.text.strip():
+                txt = node.text.strip()
                 if len(txt) > 1:
                     buffer.append(txt)
 
         if buffer:
-            articles.append(buffer)
+            stories.append(buffer)
 
-    return articles
+    return stories
 
 
 # =========================
-# SIMPLE LAYOUT MODE (IF EXISTS)
+# EXTRACT IMAGES (optional)
 # =========================
-def extract_layout(zip_file):
+def extract_images(z):
+    imgs = []
+
+    for f in z.namelist():
+        if f.lower().endswith((".jpg", ".png", ".jpeg")):
+            imgs.append(f)
+
+    return imgs
+
+
+# =========================
+# GET GEOMETRIC BOUNDS SAFE
+# =========================
+def get_bounds(node):
+    for k, v in node.attrib.items():
+        if "geometricbounds" in k.lower():
+            return v
+
+    for child in node:
+        if child.text and "," in child.text:
+            return child.text.strip()
+
+    return None
+
+
+# =========================
+# EXTRACT LAYOUT FRAMES (FIXED V8)
+# =========================
+def extract_frames(z):
     frames = []
 
-    for f in zip_file.namelist():
-        if "Spreads" not in f:
+    for f in z.namelist():
+        if not f.startswith("Spreads/"):
             continue
 
-        xml = safe(zip_file.read(f))
+        xml = safe_xml(z.read(f))
         if xml is None:
             continue
 
-        for n in xml.iter():
-            if hasattr(n, "attrib"):
-                for k, v in n.attrib.items():
-                    if "bounds" in k.lower():
-                        try:
-                            y1,x1,y2,x2 = map(float, v.split(","))
-                            frames.append((x1,y1,x2,y2))
-                        except:
-                            pass
+        for node in xml.iter():
+
+            tag = node.tag.lower()
+
+            # accept ANY InDesign object type
+            if any(x in tag for x in ["textframe", "rectangle", "pageitem", "graphic"]):
+
+                bounds = get_bounds(node)
+
+                if not bounds:
+                    continue
+
+                try:
+                    parts = bounds.split(",")
+                    if len(parts) != 4:
+                        continue
+
+                    y1, x1, y2, x2 = map(float, parts)
+
+                    w = x2 - x1
+                    h = y2 - y1
+
+                    if w < 2 or h < 2:
+                        continue
+
+                    frames.append({
+                        "x": x1,
+                        "y": y1,
+                        "w": w,
+                        "h": h
+                    })
+
+                except:
+                    continue
 
     return frames
+
+
+# =========================
+# SMART MODE DETECTOR
+# =========================
+def has_real_layout(frames):
+    return len(frames) > 0
+
+
+# =========================
+# HTML RENDER ENGINE
+# =========================
+def render_layout(frames, stories, images):
+
+    html = []
+    story_i = 0
+    img_i = 0
+
+    for i, f in enumerate(frames):
+
+        content = ""
+
+        # story mapping
+        if story_i < len(stories):
+            content = " ".join(stories[story_i])
+            story_i += 1
+
+        # inject images occasionally
+        if img_i < len(images) and i % 4 == 0:
+            content += f"<br><img src='/static/{images[img_i]}' style='max-width:100%'>"
+            img_i += 1
+
+        html.append(f"""
+        <div class="frame"
+             style="
+                position:absolute;
+                left:{f['x']}px;
+                top:{f['y']}px;
+                width:{f['w']}px;
+                height:{f['h']}px;
+                overflow:hidden;
+                font-family:Times New Roman;
+                font-size:12px;
+                line-height:1.4;
+                padding:6px;
+                box-sizing:border-box;
+             ">
+            {content}
+        </div>
+        """)
+
+    return "\n".join(html)
+
+
+# =========================
+# FALLBACK MODE (NO LAYOUT)
+# =========================
+def render_structured(stories):
+
+    html = ""
+
+    for i, block in enumerate(stories):
+
+        cls = "body"
+
+        if i == 0:
+            cls = "title"
+        elif i == 1:
+            cls = "authors"
+        elif "abstract" in " ".join(block).lower():
+            cls = "abstract"
+
+        html += f"<div class='{cls}'>" + "<p>".join(block) + "</p></div>"
+
+    return html
 
 
 # =========================
@@ -92,63 +208,59 @@ def extract_layout(zip_file):
 # =========================
 @app.route("/")
 def home():
-    return "<h1>IDML Engine Smart V8</h1><a href='/upload'>upload</a>"
+    return """
+    <h1>V8 IDML Journal Engine (FIXED)</h1>
+    <a href="/upload">Upload IDML</a>
+    """
 
 
 # =========================
 # UPLOAD
 # =========================
-@app.route("/upload", methods=["GET","POST"])
+@app.route("/upload", methods=["GET", "POST"])
 def upload():
 
     try:
         if request.method == "POST":
 
             file = request.files.get("idml_file")
+            if not file:
+                return "No file uploaded"
+
             path = os.path.join(UPLOAD_FOLDER, file.filename)
             file.save(path)
 
             with zipfile.ZipFile(path, "r") as z:
 
-                has_layout = detect_layout(z)
+                frames = extract_frames(z)
+                stories = extract_stories(z)
+                images = extract_images(z)
 
                 # =========================
                 # MODE SWITCH
                 # =========================
-                if has_layout:
-
-                    frames = extract_layout(z)
-
-                    if not frames:
-                        return "Layout detected but no frames parsed"
-
-                    html = "".join([
-                        f"<div style='position:absolute;left:{x}px;top:{y}px;width:{x2-x}px;height:{y2-y}px;border:1px solid black'>FRAME</div>"
-                        for x,y,x2,y2 in frames
-                    ])
-
-                    return render_template("article.html", content=html)
-
+                if has_real_layout(frames):
+                    html = render_layout(frames, stories, images)
                 else:
+                    html = render_structured(stories)
 
-                    # 🔵 STRUCTURED MODE
-                    articles = extract_structured(z)
+            return render_template("article.html", content=html)
 
-                    html = ""
+        return """
+        <h2>Upload IDML</h2>
+        <form method="POST" enctype="multipart/form-data">
+            <input type="file" name="idml_file">
+            <button>Render</button>
+        </form>
+        """
 
-                    for block in articles:
-                        html += "<div class='article'>"
-                        html += "<p>" + "</p><p>".join(block) + "</p>"
-                        html += "</div>"
-
-                    return render_template("article.html", content=html)
-
-        return "<form method='post' enctype='multipart/form-data'><input type='file' name='idml_file'><button>upload</button></form>"
-
-    except:
+    except Exception:
         print(traceback.format_exc())
-        return "ERROR"
+        return "SERVER ERROR - check logs"
 
 
+# =========================
+# RUN
+# =========================
 if __name__ == "__main__":
     app.run(debug=True)
