@@ -16,89 +16,104 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 # =========================
 # SAFE XML PARSER
 # =========================
-def safe_parse(xml_bytes):
+def safe_xml(data):
     try:
-        return ET.fromstring(xml_bytes)
+        return ET.fromstring(data)
     except:
         return None
 
 
 # =========================
-# EXTRACT GEOMETRIC BOUNDS (RECURSIVE)
+# EXTRACT BOUNDS (ULTRA ROBUST)
 # =========================
-def find_bounds(node):
+def extract_bounds(node):
     """
-    Caută GeometricBounds oriunde în XML node (IDML safe)
+    Caută GeometricBounds oriunde în IDML
     """
+
+    # 1. direct attributes
+    if hasattr(node, "attrib"):
+        for k, v in node.attrib.items():
+            if "bounds" in k.lower():
+                return v
+
+    # 2. recursive search
     for child in node.iter():
 
-        tag = child.tag.lower() if isinstance(child.tag, str) else ""
+        # attribute fallback
+        if hasattr(child, "attrib"):
+            for k, v in child.attrib.items():
+                if "bounds" in k.lower():
+                    return v
 
-        if "geometricbounds" in tag:
-            if child.text:
-                return child.text
+        # XML text fallback
+        if child.text and isinstance(child.text, str):
+            txt = child.text.strip()
+            if txt.count(",") == 3:
+                return txt
 
     return None
 
 
 # =========================
-# PARSE SPREADS → FRAMES
+# PARSE ALL LAYOUT AREAS
 # =========================
-def parse_spreads(z):
+def parse_layout(zip_file):
     frames = []
 
-    for file in z.namelist():
+    for file in zip_file.namelist():
 
-        if "Spreads" not in file:
+        # 🔥 SCAN EVERYTHING (Spreads + Master + even weird exports)
+        if not any(x in file for x in ["Spreads", "Master", "Stories"]):
             continue
 
-        xml = safe_parse(z.read(file))
+        xml = safe_xml(zip_file.read(file))
         if xml is None:
             continue
 
         for node in xml.iter():
 
-            # accept ANY object that might contain layout
-            tag = str(node.tag).lower()
+            bounds = extract_bounds(node)
 
-            if any(x in tag for x in ["textframe", "pageitem", "rectangle", "oval"]):
+            if bounds:
 
-                bounds = find_bounds(node)
+                try:
+                    parts = bounds.split(",")
 
-                if not bounds:
-                    bounds = node.attrib.get("GeometricBounds")
-
-                if bounds:
-                    try:
-                        y1, x1, y2, x2 = map(float, bounds.split(","))
-
-                        if x2 > x1 and y2 > y1:
-
-                            frames.append({
-                                "x": x1,
-                                "y": y1,
-                                "w": x2 - x1,
-                                "h": y2 - y1
-                            })
-
-                    except:
+                    if len(parts) != 4:
                         continue
+
+                    y1, x1, y2, x2 = map(float, parts)
+
+                    # ignore invalid boxes
+                    if abs(x2 - x1) < 2 or abs(y2 - y1) < 2:
+                        continue
+
+                    frames.append({
+                        "x": x1,
+                        "y": y1,
+                        "w": x2 - x1,
+                        "h": y2 - y1
+                    })
+
+                except:
+                    continue
 
     return frames
 
 
 # =========================
-# PARSE STORIES → TEXT BLOCKS
+# PARSE STORIES (TEXT SAFE)
 # =========================
-def parse_stories(z):
+def parse_text(zip_file):
     texts = []
 
-    for file in z.namelist():
+    for file in zip_file.namelist():
 
         if not file.startswith("Stories/"):
             continue
 
-        xml = safe_parse(z.read(file))
+        xml = safe_xml(zip_file.read(file))
         if xml is None:
             continue
 
@@ -107,10 +122,8 @@ def parse_stories(z):
         for node in xml.iter():
 
             if node.text and node.text.strip():
-
                 txt = node.text.strip()
 
-                # filtrare zgomot XML
                 if len(txt) > 1:
                     buffer.append(txt)
 
@@ -121,7 +134,7 @@ def parse_stories(z):
 
 
 # =========================
-# COMBINE LAYOUT + TEXT
+# RENDER ENGINE
 # =========================
 def render(frames, texts):
 
@@ -142,6 +155,7 @@ def render(frames, texts):
                 overflow:hidden;
                 font-family:Times New Roman;
                 font-size:12px;
+                line-height:1.4;
              ">
             {content}
         </div>
@@ -151,19 +165,18 @@ def render(frames, texts):
 
 
 # =========================
-# HOME PAGE
+# HOME
 # =========================
 @app.route("/")
 def home():
     return """
-    <h1>V6 IDML Medical Journal Engine</h1>
-    <p>Pixel layout reconstruction (stable version)</p>
+    <h1>V7 IDML Medical Renderer</h1>
     <a href="/upload">Upload IDML</a>
     """
 
 
 # =========================
-# UPLOAD + RENDER
+# UPLOAD + PROCESS
 # =========================
 @app.route("/upload", methods=["GET", "POST"])
 def upload():
@@ -172,6 +185,7 @@ def upload():
         if request.method == "POST":
 
             file = request.files.get("idml_file")
+
             if not file:
                 return "No file uploaded"
 
@@ -180,12 +194,12 @@ def upload():
 
             with zipfile.ZipFile(path, "r") as z:
 
-                frames = parse_spreads(z)
-                texts = parse_stories(z)
+                frames = parse_layout(z)
+                texts = parse_text(z)
 
-                # fallback safety
-                if not frames:
-                    return "ERROR: No frames detected in Spreads"
+                # 🔥 IMPORTANT fallback
+                if len(frames) == 0:
+                    return "ERROR: No layout frames detected in IDML (file may be text-only export)"
 
                 html = render(frames, texts)
 
@@ -201,7 +215,7 @@ def upload():
 
     except Exception:
         print(traceback.format_exc())
-        return "SERVER ERROR (check logs)"
+        return "SERVER ERROR - check logs"
 
 
 if __name__ == "__main__":
