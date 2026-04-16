@@ -1,63 +1,28 @@
 body {
     margin: 0;
-    background: #e5e5e5;
-    font-family: "Times New Roman", serif;
+    background: #ddd;
 }
 
-/* PAGE */
-.journal-page {
+.page {
     width: 210mm;
-    min-height: 297mm;
+    height: 297mm;
     margin: auto;
     background: white;
-    padding: 20mm;
-
-    column-count: 2;
-    column-gap: 10mm;
+    position: relative;
 }
 
-/* TITLE */
-.title {
-    column-span: all;
-    font-size: 26px;
-    font-weight: bold;
-    margin-bottom: 10px;
+/* 🔥 IMPORTANT: REAL INDD-LIKE FRAME */
+.frame {
+    position: absolute;
+    border: 1px solid transparent;
+    padding: 5px;
+    font-family: "Times New Roman";
+    font-size: 12px;
+    overflow: hidden;
+    box-sizing: border-box;
 }
 
-/* AUTHORS */
-.authors {
-    column-span: all;
-    font-size: 14px;
-    font-style: italic;
-    margin-bottom: 10px;
-}
-
-/* ABSTRACT */
-.abstract {
-    column-span: all;
-    font-style: italic;
-    background: #f4f4f4;
-    padding: 10px;
-    margin-bottom: 15px;
-}
-
-/* HEADINGS */
-.heading {
-    font-size: 16px;
-    font-weight: bold;
-    margin-top: 10px;
-}
-
-/* BODY */
-.body {
-    text-align: justify;
-    font-size: 12pt;
-    line-height: 1.6;
-}
-
-/* CAPTIONS */
-.caption {
-    font-size: 10px;
-    font-style: italic;
-    text-align: center;
+/* optional debug mode */
+.frame:hover {
+    border: 1px solid red;
 }
