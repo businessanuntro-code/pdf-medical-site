@@ -1,1 +1,63 @@
-.journal-page{width:210mm;min-height:297mm;margin:auto;background:#fff;padding:20mm;column-count:2;column-gap:8mm}.title{column-span:all;font-size:24pt;font-weight:bold}.authors{column-span:all;font-style:italic}.body{font-size:11pt;line-height:1.6;text-align:justify}
+body {
+    margin: 0;
+    background: #e5e5e5;
+    font-family: "Times New Roman", serif;
+}
+
+/* PAGE */
+.journal-page {
+    width: 210mm;
+    min-height: 297mm;
+    margin: auto;
+    background: white;
+    padding: 20mm;
+
+    column-count: 2;
+    column-gap: 10mm;
+}
+
+/* TITLE */
+.title {
+    column-span: all;
+    font-size: 26px;
+    font-weight: bold;
+    margin-bottom: 10px;
+}
+
+/* AUTHORS */
+.authors {
+    column-span: all;
+    font-size: 14px;
+    font-style: italic;
+    margin-bottom: 10px;
+}
+
+/* ABSTRACT */
+.abstract {
+    column-span: all;
+    font-style: italic;
+    background: #f4f4f4;
+    padding: 10px;
+    margin-bottom: 15px;
+}
+
+/* HEADINGS */
+.heading {
+    font-size: 16px;
+    font-weight: bold;
+    margin-top: 10px;
+}
+
+/* BODY */
+.body {
+    text-align: justify;
+    font-size: 12pt;
+    line-height: 1.6;
+}
+
+/* CAPTIONS */
+.caption {
+    font-size: 10px;
+    font-style: italic;
+    text-align: center;
+}
