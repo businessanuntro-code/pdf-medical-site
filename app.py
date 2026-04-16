@@ -6,89 +6,99 @@ import traceback
 
 app = Flask(__name__)
 
-# -------------------------
-# SETUP
-# -------------------------
 UPLOAD_FOLDER = os.path.join(os.getcwd(), "uploads")
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 
 # =========================
-# SAFE XML READER
+# SAFE XML PARSER
 # =========================
-def read_xml(z, path):
+def safe_xml(xml_bytes):
     try:
-        data = z.read(path)
-        return ET.fromstring(data)
-    except Exception:
+        return ET.fromstring(xml_bytes)
+    except:
         return None
 
 
 # =========================
-# PARSE SPREADS (LAYOUT)
+# PARSE SPREADS (LAYOUT SAFE)
 # =========================
-def parse_spreads(z):
+def parse_spreads(zip_file):
     frames = []
 
-    spread_files = [f for f in z.namelist() if f.startswith("Spreads/")]
+    try:
+        for file in zip_file.namelist():
+            if "Spreads" not in file:
+                continue
 
-    for file in spread_files:
-        root = read_xml(z, file)
-        if root is None:
-            continue
+            xml = safe_xml(zip_file.read(file))
+            if xml is None:
+                continue
 
-        for node in root.iter():
+            for node in xml.iter():
 
-            tag = node.tag.lower()
+                tag = node.tag.lower()
 
-            # TEXT FRAME (layout box)
-            if "textframe" in tag:
+                if "textframe" in tag or "pageitem" in tag:
 
-                geom = node.attrib.get("GeometricBounds", None)
+                    bounds = None
 
-                if geom:
-                    try:
-                        y1, x1, y2, x2 = map(float, geom.split(","))
+                    # caută GeometricBounds oriunde în sub-tree
+                    for child in node.iter():
+                        if "geometricbounds" in child.tag.lower():
+                            bounds = child.text
 
-                        frames.append({
-                            "x": x1,
-                            "y": y1,
-                            "w": x2 - x1,
-                            "h": y2 - y1
-                        })
-                    except:
-                        continue
+                    if bounds:
+                        try:
+                            y1, x1, y2, x2 = map(float, bounds.split(","))
+
+                            frames.append({
+                                "x": x1,
+                                "y": y1,
+                                "w": x2 - x1,
+                                "h": y2 - y1
+                            })
+                        except:
+                            continue
+
+    except Exception:
+        print("SPREAD ERROR:", traceback.format_exc())
 
     return frames
 
 
 # =========================
-# PARSE STORIES (TEXT)
+# PARSE STORIES (TEXT SAFE)
 # =========================
-def parse_stories(z):
+def parse_stories(zip_file):
     texts = []
 
-    story_files = [f for f in z.namelist() if f.startswith("Stories/")]
+    try:
+        for file in zip_file.namelist():
+            if not file.startswith("Stories/"):
+                continue
 
-    for file in story_files:
-        root = read_xml(z, file)
-        if root is None:
-            continue
+            xml = safe_xml(zip_file.read(file))
+            if xml is None:
+                continue
 
-        for node in root.iter():
+            for node in xml.iter():
 
-            if "ParagraphStyleRange" in node.tag:
+                if "ParagraphStyleRange" in node.tag:
 
-                parts = []
+                    parts = []
 
-                for t in node.iter():
-                    if t.text and t.text.strip():
-                        parts.append(t.text.strip())
+                    for t in node.iter():
+                        if t.text and t.text.strip():
+                            parts.append(t.text.strip())
 
-                text = " ".join(parts).strip()
+                    text = " ".join(parts).strip()
 
-                if text:
-                    texts.append(text)
+                    if text:
+                        texts.append(text)
+
+    except Exception:
+        print("STORY ERROR:", traceback.format_exc())
 
     return texts
 
@@ -120,14 +130,13 @@ def combine(frames, texts):
 
 
 # =========================
-# HOME PAGE
+# HOME
 # =========================
 @app.route("/")
 def home():
     return """
-    <h1>Medical Journal IDML Engine V5</h1>
-    <p>InDesign-like renderer (Spreads + Frames)</p>
-    <a href="/upload">Go to Upload</a>
+    <h1>V5 IDML Journal Engine</h1>
+    <a href="/upload">Upload IDML</a>
     """
 
 
@@ -141,7 +150,6 @@ def upload():
         if request.method == "POST":
 
             file = request.files.get("idml_file")
-
             if not file:
                 return "No file uploaded"
 
@@ -153,25 +161,25 @@ def upload():
                 frames = parse_spreads(z)
                 texts = parse_stories(z)
 
+                if not frames:
+                    return "No frames found in IDML (Spreads issue)"
+
                 html = combine(frames, texts)
 
             return render_template("article.html", content=html)
 
         return """
-        <h2>Upload IDML File</h2>
+        <h2>Upload IDML</h2>
         <form method="POST" enctype="multipart/form-data">
-            <input type="file" name="idml_file" accept=".idml">
-            <button type="submit">Render Journal</button>
+            <input type="file" name="idml_file">
+            <button type="submit">Render</button>
         </form>
         """
 
     except Exception:
         print(traceback.format_exc())
-        return "SERVER ERROR - check logs"
+        return "SERVER ERROR (check logs)"
 
 
-# =========================
-# RUN
-# =========================
 if __name__ == "__main__":
     app.run(debug=True)
