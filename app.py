@@ -1,6 +1,5 @@
 from flask import Flask, render_template, request
-import os
-import zipfile
+import os, zipfile
 from lxml import etree as ET
 import traceback
 
@@ -11,116 +10,175 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 
 # =========================
-# SAFE XML PARSER
+# SAFE XML
 # =========================
-def safe_xml(data):
+def safe(xml):
     try:
-        return ET.fromstring(data)
+        return ET.fromstring(xml)
     except:
         return None
 
 
 # =========================
-# EXTRACT STORIES (fallback content)
+# EXTRACT STORIES (WITH IDS)
 # =========================
 def extract_stories(z):
-    stories = []
+    stories = {}
 
     for f in z.namelist():
         if not f.startswith("Stories/"):
             continue
 
-        xml = safe_xml(z.read(f))
-        if xml is None:
+        root = safe(z.read(f))
+        if root is None:
             continue
 
-        buffer = []
+        story_id = f
 
-        for node in xml.iter():
+        paragraphs = []
+
+        for node in root.iter():
+
             if node.text and node.text.strip():
                 txt = node.text.strip()
                 if len(txt) > 1:
-                    buffer.append(txt)
+                    paragraphs.append(txt)
 
-        if buffer:
-            stories.append(buffer)
+        if paragraphs:
+            stories[story_id] = paragraphs
 
     return stories
 
 
 # =========================
-# EXTRACT IMAGES (optional)
+# EXTRACT TABLES (basic IDML structure)
 # =========================
-def extract_images(z):
-    imgs = []
+def extract_tables(z):
+    tables = []
 
     for f in z.namelist():
-        if f.lower().endswith((".jpg", ".png", ".jpeg")):
-            imgs.append(f)
+        if "Story" not in f:
+            continue
 
-    return imgs
+        root = safe(z.read(f))
+        if root is None:
+            continue
+
+        for table in root.iter():
+
+            if "Table" in table.tag:
+
+                rows = []
+
+                for row in table.iter():
+
+                    if "Row" in row.tag:
+                        cells = []
+
+                        for cell in row.iter():
+
+                            if "Cell" in cell.tag:
+
+                                text = ""
+
+                                for t in cell.iter():
+                                    if t.text:
+                                        text += t.text.strip() + " "
+
+                                cells.append(text.strip())
+
+                        if cells:
+                            rows.append(cells)
+
+                if rows:
+                    tables.append(rows)
+
+    return tables
 
 
 # =========================
-# GET GEOMETRIC BOUNDS SAFE
+# EXTRACT IMAGES
 # =========================
-def get_bounds(node):
-    for k, v in node.attrib.items():
-        if "geometricbounds" in k.lower():
-            return v
+def extract_images(z):
+    images = []
 
-    for child in node:
-        if child.text and "," in child.text:
-            return child.text.strip()
+    for f in z.namelist():
+        if f.lower().endswith((".jpg", ".jpeg", ".png")):
+            images.append(f)
 
-    return None
+    return images
 
 
 # =========================
-# EXTRACT LAYOUT FRAMES (FIXED V8)
+# EXTRACT THREADING (NEXT FRAME LOGIC)
 # =========================
-def extract_frames(z):
-    frames = []
+def extract_threading(z):
+    links = {}
 
     for f in z.namelist():
         if not f.startswith("Spreads/"):
             continue
 
-        xml = safe_xml(z.read(f))
-        if xml is None:
+        root = safe(z.read(f))
+        if root is None:
             continue
 
-        for node in xml.iter():
+        for node in root.iter():
+
+            nid = node.attrib.get("Self") or node.attrib.get("id")
+
+            next_frame = node.attrib.get("NextTextFrame")
+            prev_frame = node.attrib.get("PreviousTextFrame")
+
+            if nid:
+                links[nid] = {
+                    "next": next_frame,
+                    "prev": prev_frame
+                }
+
+    return links
+
+
+# =========================
+# EXTRACT FRAMES WITH POSITION
+# =========================
+def extract_frames(z):
+    frames = {}
+
+    for f in z.namelist():
+        if not f.startswith("Spreads/"):
+            continue
+
+        root = safe(z.read(f))
+        if root is None:
+            continue
+
+        for node in root.iter():
 
             tag = node.tag.lower()
 
-            # accept ANY InDesign object type
-            if any(x in tag for x in ["textframe", "rectangle", "pageitem", "graphic"]):
+            if "textframe" in tag or "rectangle" in tag:
 
-                bounds = get_bounds(node)
+                gb = None
 
-                if not bounds:
+                for k, v in node.attrib.items():
+                    if "geometricbounds" in k.lower():
+                        gb = v
+
+                if not gb:
                     continue
 
                 try:
-                    parts = bounds.split(",")
-                    if len(parts) != 4:
-                        continue
+                    y1, x1, y2, x2 = map(float, gb.split(","))
 
-                    y1, x1, y2, x2 = map(float, parts)
+                    fid = node.attrib.get("Self") or str(len(frames))
 
-                    w = x2 - x1
-                    h = y2 - y1
-
-                    if w < 2 or h < 2:
-                        continue
-
-                    frames.append({
+                    frames[fid] = {
                         "x": x1,
                         "y": y1,
-                        "w": w,
-                        "h": h
-                    })
+                        "w": x2 - x1,
+                        "h": y2 - y1
+                    }
 
                 except:
                     continue
@@ -129,51 +187,98 @@ def extract_frames(z):
 
 
 # =========================
-# SMART MODE DETECTOR
+# BUILD THREAD ORDER
 # =========================
-def has_real_layout(frames):
-    return len(frames) > 0
+def build_flow(threading_map):
+
+    visited = set()
+    ordered = []
+
+    for k in threading_map.keys():
+
+        if k in visited:
+            continue
+
+        current = k
+
+        while current and current not in visited:
+            ordered.append(current)
+            visited.add(current)
+
+            nxt = threading_map.get(current, {}).get("next")
+            current = nxt
+
+    return ordered
 
 
 # =========================
-# HTML RENDER ENGINE
+# RENDER ENGINE
 # =========================
-def render_layout(frames, stories, images):
+def render(frames, stories, tables, images, flow):
 
     html = []
+    story_list = list(stories.values())
+
     story_i = 0
     img_i = 0
+    table_i = 0
 
-    for i, f in enumerate(frames):
+    for i, frame_id in enumerate(flow):
+
+        frame = frames.get(frame_id, None)
+        if not frame:
+            continue
 
         content = ""
 
-        # story mapping
-        if story_i < len(stories):
-            content = " ".join(stories[story_i])
+        # =====================
+        # TABLE PRIORITY
+        # =====================
+        if table_i < len(tables) and i % 6 == 0:
+            table = tables[table_i]
+            table_i += 1
+
+            t_html = "<table border='1' style='width:100%;border-collapse:collapse'>"
+
+            for row in table:
+                t_html += "<tr>"
+                for c in row:
+                    t_html += f"<td>{c}</td>"
+                t_html += "</tr>"
+
+            t_html += "</table>"
+
+            content += t_html
+
+        # =====================
+        # STORY FLOW
+        # =====================
+        if story_i < len(story_list):
+            content += "<p>" + " ".join(story_list[story_i]) + "</p>"
             story_i += 1
 
-        # inject images occasionally
+        # =====================
+        # IMAGES
+        # =====================
         if img_i < len(images) and i % 4 == 0:
-            content += f"<br><img src='/static/{images[img_i]}' style='max-width:100%'>"
+            content += f"<img src='/static/{images[img_i]}' style='max-width:100%'>"
             img_i += 1
 
         html.append(f"""
-        <div class="frame"
-             style="
-                position:absolute;
-                left:{f['x']}px;
-                top:{f['y']}px;
-                width:{f['w']}px;
-                height:{f['h']}px;
-                overflow:hidden;
-                font-family:Times New Roman;
-                font-size:12px;
-                line-height:1.4;
-                padding:6px;
-                box-sizing:border-box;
-             ">
-            {content}
+        <div style="
+            position:absolute;
+            left:{frame['x']}px;
+            top:{frame['y']}px;
+            width:{frame['w']}px;
+            height:{frame['h']}px;
+            overflow:hidden;
+            font-family:Times New Roman;
+            font-size:12px;
+            line-height:1.4;
+            padding:6px;
+            box-sizing:border-box;
+        ">
+        {content}
         </div>
         """)
 
@@ -181,86 +286,54 @@ def render_layout(frames, stories, images):
 
 
 # =========================
-# FALLBACK MODE (NO LAYOUT)
-# =========================
-def render_structured(stories):
-
-    html = ""
-
-    for i, block in enumerate(stories):
-
-        cls = "body"
-
-        if i == 0:
-            cls = "title"
-        elif i == 1:
-            cls = "authors"
-        elif "abstract" in " ".join(block).lower():
-            cls = "abstract"
-
-        html += f"<div class='{cls}'>" + "<p>".join(block) + "</p></div>"
-
-    return html
-
-
-# =========================
 # HOME
 # =========================
 @app.route("/")
 def home():
-    return """
-    <h1>V8 IDML Journal Engine (FIXED)</h1>
-    <a href="/upload">Upload IDML</a>
-    """
+    return "<h1>V9 True InDesign Engine</h1><a href='/upload'>Upload IDML</a>"
 
 
 # =========================
 # UPLOAD
 # =========================
-@app.route("/upload", methods=["GET", "POST"])
+@app.route("/upload", methods=["GET","POST"])
 def upload():
 
     try:
         if request.method == "POST":
 
-            file = request.files.get("idml_file")
-            if not file:
-                return "No file uploaded"
-
+            file = request.files["idml_file"]
             path = os.path.join(UPLOAD_FOLDER, file.filename)
             file.save(path)
 
             with zipfile.ZipFile(path, "r") as z:
 
-                frames = extract_frames(z)
                 stories = extract_stories(z)
+                tables = extract_tables(z)
                 images = extract_images(z)
+                frames = extract_frames(z)
+                threading = extract_threading(z)
 
-                # =========================
-                # MODE SWITCH
-                # =========================
-                if has_real_layout(frames):
-                    html = render_layout(frames, stories, images)
-                else:
-                    html = render_structured(stories)
+                flow = build_flow(threading)
+
+                if not frames:
+                    return "ERROR: No frames detected in IDML"
+
+                html = render(frames, stories, tables, images, flow)
 
             return render_template("article.html", content=html)
 
         return """
-        <h2>Upload IDML</h2>
-        <form method="POST" enctype="multipart/form-data">
-            <input type="file" name="idml_file">
-            <button>Render</button>
+        <form method='POST' enctype='multipart/form-data'>
+            <input type='file' name='idml_file'>
+            <button>Upload IDML</button>
         </form>
         """
 
-    except Exception:
+    except:
         print(traceback.format_exc())
-        return "SERVER ERROR - check logs"
+        return "SERVER ERROR"
 
 
-# =========================
-# RUN
-# =========================
 if __name__ == "__main__":
     app.run(debug=True)
