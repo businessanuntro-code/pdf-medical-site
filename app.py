@@ -1,21 +1,26 @@
 from flask import Flask, render_template, request
-import os, zipfile
+import os
+import zipfile
 from lxml import etree as ET
 import traceback
 
 app = Flask(__name__)
 
+# -------------------------
+# SETUP
+# -------------------------
 UPLOAD_FOLDER = os.path.join(os.getcwd(), "uploads")
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 
 # =========================
-# EXTRACT IDML XML SAFE
+# SAFE XML READER
 # =========================
 def read_xml(z, path):
     try:
-        return ET.fromstring(z.read(path))
-    except:
+        data = z.read(path)
+        return ET.fromstring(data)
+    except Exception:
         return None
 
 
@@ -32,12 +37,11 @@ def parse_spreads(z):
         if root is None:
             continue
 
-        # Text Frames (layout boxes)
         for node in root.iter():
 
             tag = node.tag.lower()
 
-            # TEXT FRAME (IMPORTANT)
+            # TEXT FRAME (layout box)
             if "textframe" in tag:
 
                 geom = node.attrib.get("GeometricBounds", None)
@@ -47,15 +51,13 @@ def parse_spreads(z):
                         y1, x1, y2, x2 = map(float, geom.split(","))
 
                         frames.append({
-                            "type": "frame",
                             "x": x1,
                             "y": y1,
                             "w": x2 - x1,
-                            "h": y2 - y1,
-                            "content": ""
+                            "h": y2 - y1
                         })
                     except:
-                        pass
+                        continue
 
     return frames
 
@@ -78,20 +80,21 @@ def parse_stories(z):
             if "ParagraphStyleRange" in node.tag:
 
                 parts = []
+
                 for t in node.iter():
                     if t.text and t.text.strip():
                         parts.append(t.text.strip())
 
-                txt = " ".join(parts)
+                text = " ".join(parts).strip()
 
-                if txt:
-                    texts.append(txt)
+                if text:
+                    texts.append(text)
 
     return texts
 
 
 # =========================
-# COMBINE STORY + FRAMES
+# COMBINE LAYOUT + TEXT
 # =========================
 def combine(frames, texts):
     html = []
@@ -103,6 +106,7 @@ def combine(frames, texts):
         html.append(f"""
         <div class="frame"
              style="
+                position:absolute;
                 left:{frame['x']}px;
                 top:{frame['y']}px;
                 width:{frame['w']}px;
@@ -116,6 +120,18 @@ def combine(frames, texts):
 
 
 # =========================
+# HOME PAGE
+# =========================
+@app.route("/")
+def home():
+    return """
+    <h1>Medical Journal IDML Engine V5</h1>
+    <p>InDesign-like renderer (Spreads + Frames)</p>
+    <a href="/upload">Go to Upload</a>
+    """
+
+
+# =========================
 # UPLOAD + RENDER
 # =========================
 @app.route("/upload", methods=["GET", "POST"])
@@ -124,7 +140,10 @@ def upload():
     try:
         if request.method == "POST":
 
-            file = request.files["idml_file"]
+            file = request.files.get("idml_file")
+
+            if not file:
+                return "No file uploaded"
 
             path = os.path.join(UPLOAD_FOLDER, file.filename)
             file.save(path)
@@ -139,16 +158,20 @@ def upload():
             return render_template("article.html", content=html)
 
         return """
+        <h2>Upload IDML File</h2>
         <form method="POST" enctype="multipart/form-data">
-            <input type="file" name="idml_file">
-            <button type="submit">Upload IDML</button>
+            <input type="file" name="idml_file" accept=".idml">
+            <button type="submit">Render Journal</button>
         </form>
         """
 
     except Exception:
         print(traceback.format_exc())
-        return "ERROR - check logs"
+        return "SERVER ERROR - check logs"
 
 
+# =========================
+# RUN
+# =========================
 if __name__ == "__main__":
     app.run(debug=True)
