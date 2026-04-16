@@ -6,17 +6,14 @@ import traceback
 
 app = Flask(__name__)
 
-# =========================
-# SETUP
-# =========================
 UPLOAD_FOLDER = os.path.join(os.getcwd(), "uploads")
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 
 # =========================
-# SAFE XML PARSER
+# SAFE XML
 # =========================
-def safe_xml(data):
+def xml_safe(data):
     try:
         return ET.fromstring(data)
     except:
@@ -24,68 +21,82 @@ def safe_xml(data):
 
 
 # =========================
-# EXTRACT BOUNDS (ULTRA ROBUST)
+# EXTRACT STORY TEXT ORDERED
 # =========================
-def extract_bounds(node):
-    """
-    Caută GeometricBounds oriunde în IDML
-    """
+def extract_stories(z):
+    stories = []
 
-    # 1. direct attributes
-    if hasattr(node, "attrib"):
-        for k, v in node.attrib.items():
-            if "bounds" in k.lower():
-                return v
+    for file in z.namelist():
+        if not file.startswith("Stories/"):
+            continue
 
-    # 2. recursive search
-    for child in node.iter():
+        xml = xml_safe(z.read(file))
+        if xml is None:
+            continue
 
-        # attribute fallback
-        if hasattr(child, "attrib"):
-            for k, v in child.attrib.items():
-                if "bounds" in k.lower():
-                    return v
+        buffer = []
 
-        # XML text fallback
-        if child.text and isinstance(child.text, str):
-            txt = child.text.strip()
-            if txt.count(",") == 3:
-                return txt
+        for node in xml.iter():
 
-    return None
+            if node.text and node.text.strip():
+                txt = node.text.strip()
+
+                if len(txt) > 1:
+                    buffer.append(txt)
+
+        if buffer:
+            stories.append(buffer)
+
+    return stories
 
 
 # =========================
-# PARSE ALL LAYOUT AREAS
+# EXTRACT IMAGES (PLACEHOLDERS)
 # =========================
-def parse_layout(zip_file):
+def extract_images(z):
+    images = []
+
+    for file in z.namelist():
+        if "Resources" in file and file.endswith((".jpg", ".png", ".jpeg")):
+            images.append(file)
+
+    return images
+
+
+# =========================
+# EXTRACT LAYOUT FRAMES (FULL SCAN)
+# =========================
+def extract_frames(z):
     frames = []
 
-    for file in zip_file.namelist():
-
-        # 🔥 SCAN EVERYTHING (Spreads + Master + even weird exports)
+    for file in z.namelist():
         if not any(x in file for x in ["Spreads", "Master", "Stories"]):
             continue
 
-        xml = safe_xml(zip_file.read(file))
+        xml = xml_safe(z.read(file))
         if xml is None:
             continue
 
         for node in xml.iter():
 
-            bounds = extract_bounds(node)
+            bounds = None
+
+            # attribute bounds
+            if hasattr(node, "attrib"):
+                for k, v in node.attrib.items():
+                    if "bounds" in k.lower():
+                        bounds = v
+
+            # nested bounds
+            for child in node.iter():
+                if child.text and isinstance(child.text, str):
+                    if child.text.count(",") == 3:
+                        bounds = child.text.strip()
 
             if bounds:
-
                 try:
-                    parts = bounds.split(",")
+                    y1, x1, y2, x2 = map(float, bounds.split(","))
 
-                    if len(parts) != 4:
-                        continue
-
-                    y1, x1, y2, x2 = map(float, parts)
-
-                    # ignore invalid boxes
                     if abs(x2 - x1) < 2 or abs(y2 - y1) < 2:
                         continue
 
@@ -103,46 +114,28 @@ def parse_layout(zip_file):
 
 
 # =========================
-# PARSE STORIES (TEXT SAFE)
+# JOURNAL RENDER ENGINE
 # =========================
-def parse_text(zip_file):
-    texts = []
-
-    for file in zip_file.namelist():
-
-        if not file.startswith("Stories/"):
-            continue
-
-        xml = safe_xml(zip_file.read(file))
-        if xml is None:
-            continue
-
-        buffer = []
-
-        for node in xml.iter():
-
-            if node.text and node.text.strip():
-                txt = node.text.strip()
-
-                if len(txt) > 1:
-                    buffer.append(txt)
-
-        if buffer:
-            texts.append(" ".join(buffer))
-
-    return texts
-
-
-# =========================
-# RENDER ENGINE
-# =========================
-def render(frames, texts):
+def render(frames, stories, images):
 
     html = []
+    img_index = 0
+    story_index = 0
 
     for i, frame in enumerate(frames):
 
-        content = texts[i] if i < len(texts) else ""
+        content = ""
+
+        # decide content type
+        if story_index < len(stories):
+            content = " ".join(stories[story_index])
+            story_index += 1
+
+        # inject image if available
+        if img_index < len(images) and i % 5 == 0:
+            img = images[img_index]
+            content += f'<br><img src="/static/{img}" style="max-width:100%;">'
+            img_index += 1
 
         html.append(f"""
         <div class="frame"
@@ -156,6 +149,7 @@ def render(frames, texts):
                 font-family:Times New Roman;
                 font-size:12px;
                 line-height:1.4;
+                padding:4px;
              ">
             {content}
         </div>
@@ -170,13 +164,13 @@ def render(frames, texts):
 @app.route("/")
 def home():
     return """
-    <h1>V7 IDML Medical Renderer</h1>
+    <h1>V8 Full Journal Replica Engine</h1>
     <a href="/upload">Upload IDML</a>
     """
 
 
 # =========================
-# UPLOAD + PROCESS
+# UPLOAD
 # =========================
 @app.route("/upload", methods=["GET", "POST"])
 def upload():
@@ -185,7 +179,6 @@ def upload():
         if request.method == "POST":
 
             file = request.files.get("idml_file")
-
             if not file:
                 return "No file uploaded"
 
@@ -194,28 +187,28 @@ def upload():
 
             with zipfile.ZipFile(path, "r") as z:
 
-                frames = parse_layout(z)
-                texts = parse_text(z)
+                frames = extract_frames(z)
+                stories = extract_stories(z)
+                images = extract_images(z)
 
-                # 🔥 IMPORTANT fallback
-                if len(frames) == 0:
-                    return "ERROR: No layout frames detected in IDML (file may be text-only export)"
+                if not frames:
+                    return "ERROR: No layout frames found"
 
-                html = render(frames, texts)
+                html = render(frames, stories, images)
 
             return render_template("article.html", content=html)
 
         return """
-        <h2>Upload IDML</h2>
+        <h2>Upload IDML (V8)</h2>
         <form method="POST" enctype="multipart/form-data">
             <input type="file" name="idml_file">
-            <button type="submit">Render</button>
+            <button>Render Journal</button>
         </form>
         """
 
     except Exception:
         print(traceback.format_exc())
-        return "SERVER ERROR - check logs"
+        return "SERVER ERROR"
 
 
 if __name__ == "__main__":
