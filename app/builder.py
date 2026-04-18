@@ -1,4 +1,4 @@
-def build_html(data, file_id):
+def build_html(data):
 
     return f"""
 <!DOCTYPE html>
@@ -6,15 +6,11 @@ def build_html(data, file_id):
 <head>
     <meta charset="utf-8">
     <title>{data['title']}</title>
-    <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
 
-<div class="container">
-
 <h1>{data['title']}</h1>
-
-<p class="authors">{data['authors']}</p>
+<p><b>Autori:</b> {data['authors']}</p>
 
 <hr>
 
@@ -34,12 +30,6 @@ def build_html(data, file_id):
 
 <h3>Bibliografie</h3>
 <p>{data['bibliography']}</p>
-
-<br>
-
-<a href="/article/{file_id}" target="_blank">🔗 Vezi articolul</a>
-
-</div>
 
 </body>
 </html>
