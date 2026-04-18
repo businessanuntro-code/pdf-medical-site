@@ -1,5 +1,6 @@
 from lxml import etree
 
+
 def parse_xml(path):
     tree = etree.parse(path)
     root = tree.getroot()
