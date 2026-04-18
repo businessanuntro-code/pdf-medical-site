@@ -1,35 +1,84 @@
 def build_html(data):
+    """
+    Builds article HTML from parsed XML data.
+    Expected keys:
+    - titlu_ro
+    - titlu_en
+    - autori
+    - abstract_keywords
+    - rezumat_cuvinte_cheie
+    - continut_articol
+    - bibliografie
+    """
 
     return f"""
 <!DOCTYPE html>
-<html>
+<html lang="ro">
 <head>
     <meta charset="utf-8">
-    <title>{data['title']}</title>
+    <title>{data.get('titlu_ro', 'Articol')}</title>
+    <style>
+        body {{
+            font-family: Arial, sans-serif;
+            margin: 40px;
+            line-height: 1.6;
+        }}
+        h1 {{
+            font-size: 28px;
+        }}
+        h2 {{
+            margin-top: 30px;
+            color: #222;
+        }}
+        .meta {{
+            color: #555;
+            margin-bottom: 20px;
+        }}
+        .section {{
+            margin-bottom: 25px;
+        }}
+    </style>
 </head>
 <body>
 
-<h1>{data['title']}</h1>
-<p><b>Autori:</b> {data['authors']}</p>
+    <!-- TITLU RO -->
+    <h1>{data.get('titlu_ro', '')}</h1>
 
-<hr>
+    <!-- TITLU EN -->
+    <h2>{data.get('titlu_en', '')}</h2>
 
-<h2>Introducere</h2>
-<p>{data['intro']}</p>
+    <!-- AUTORI -->
+    <div class="meta">
+        <b>Autori:</b> {data.get('autori', '')}
+    </div>
 
-<h2>Metode</h2>
-<p>{data['methods']}</p>
+    <hr>
 
-<h2>Rezultate</h2>
-<p>{data['results']}</p>
+    <!-- ABSTRACT + KEYWORDS -->
+    <div class="section">
+        <h2>Abstract & Keywords</h2>
+        <p>{data.get('abstract_keywords', '')}</p>
+    </div>
 
-<h2>Concluzii</h2>
-<p>{data['conclusion']}</p>
+    <!-- REZUMAT + CUVINTE CHEIE -->
+    <div class="section">
+        <h2>Rezumat și Cuvinte Cheie</h2>
+        <p>{data.get('rezumat_cuvinte_cheie', '')}</p>
+    </div>
 
-<hr>
+    <!-- CONTINUT ARTICOL -->
+    <div class="section">
+        <h2>Conținut articol</h2>
+        <div>
+            {data.get('continut_articol', '')}
+        </div>
+    </div>
 
-<h3>Bibliografie</h3>
-<p>{data['bibliography']}</p>
+    <!-- BIBLIOGRAFIE -->
+    <div class="section">
+        <h2>Bibliografie</h2>
+        <p>{data.get('bibliografie', '')}</p>
+    </div>
 
 </body>
 </html>
