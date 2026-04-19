@@ -1,3 +1,27 @@
+def format_bibliography(text):
+    """
+    Transformă textul brut în listă HTML (o referință pe linie)
+    """
+    if not text:
+        return ""
+
+    import re
+
+    # separă după numere (1. 2. 3.) sau newline
+    items = re.split(r'\n|\d+\.\s', text)
+
+    # curățare
+    items = [item.strip() for item in items if item.strip()]
+
+    # generează HTML list
+    html = "<ol>"
+    for item in items:
+        html += f"<li>{item}</li>"
+    html += "</ol>"
+
+    return html
+
+
 def build_html(data):
     """
     Builds article HTML from parsed XML data.
@@ -36,6 +60,12 @@ def build_html(data):
         }}
         .section {{
             margin-bottom: 25px;
+        }}
+        ol {{
+            padding-left: 20px;
+        }}
+        li {{
+            margin-bottom: 10px;
         }}
     </style>
 </head>
@@ -77,7 +107,7 @@ def build_html(data):
     <!-- BIBLIOGRAFIE -->
     <div class="section">
         <h2>Bibliografie</h2>
-        <p>{data.get('bibliografie', '')}</p>
+        {format_bibliography(data.get('bibliografie', ''))}
     </div>
 
 </body>
