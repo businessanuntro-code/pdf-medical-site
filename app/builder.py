@@ -48,10 +48,11 @@ def process_inline(text):
 
 def format_content(text):
     """
-    🔥 REGULA TA EXACTĂ:
+    🔥 REGULA FINALĂ (IMPORTANT):
 
-    - linie cu spații la început → paragraf nou
-    - linie fără spații → continuă paragraf
+    - linie care începe cu TAB (\t) → paragraf nou
+    - TAB se elimină
+    - restul → continuare paragraf
     """
 
     if not text:
@@ -60,37 +61,36 @@ def format_content(text):
     lines = text.splitlines()
 
     html = []
-    current_paragraph = []
+    buffer = []
 
     def flush():
-        nonlocal current_paragraph
+        nonlocal buffer
 
-        if not current_paragraph:
+        if not buffer:
             return ""
 
-        paragraph_text = " ".join(current_paragraph).strip()
-        paragraph_text = process_inline(paragraph_text)
+        paragraph = " ".join(buffer).strip()
+        paragraph = process_inline(paragraph)
 
-        current_paragraph = []
-        return f"<p>{paragraph_text}</p>"
+        buffer = []
+        return f"<p>{paragraph}</p>"
 
     for line in lines:
         if not line.strip():
-            # linie goală → închide paragraf
             html.append(flush())
             continue
 
-        # detectăm indentarea reală
-        has_indent = len(line) - len(line.lstrip(' ')) > 0
+        # 🔥 detectăm TAB real
+        has_tab = line.startswith("\t")
 
-        cleaned = line.strip()
+        cleaned = line.lstrip("\t").strip()
 
-        if has_indent:
+        if has_tab:
             # nou paragraf
             html.append(flush())
-            current_paragraph = [cleaned]
+            buffer = [cleaned]
         else:
-            current_paragraph.append(cleaned)
+            buffer.append(cleaned)
 
     html.append(flush())
 
