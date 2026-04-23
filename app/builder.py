@@ -24,7 +24,7 @@ def linkify(text):
 
 def superscript_refs(text):
     """
-    (17) (2,9) (1, 2, 3) → superscript
+    (17), (2,9), (1, 2, 3) → superscript
     """
     if not text:
         return ""
@@ -48,12 +48,10 @@ def process_inline(text):
 
 def format_content(text):
     """
-    🔥 INTELIGENT PARAGRAPH BUILDER:
+    🔥 REGULA TA EXACTĂ:
 
-    Reguli:
-    - linie goală → separă paragraf
-    - linie scurtă (titlu) → paragraf nou indentat
-    - continut → merge în același paragraf
+    - linie cu spații la început → paragraf nou
+    - linie fără spații → continuă paragraf
     """
 
     if not text:
@@ -62,50 +60,41 @@ def format_content(text):
     lines = text.splitlines()
 
     html = []
-    buffer = ""
+    current_paragraph = []
 
-    def flush_paragraph(paragraph, indent=False):
-        if not paragraph.strip():
+    def flush():
+        nonlocal current_paragraph
+
+        if not current_paragraph:
             return ""
 
-        paragraph = process_inline(paragraph.strip())
+        paragraph_text = " ".join(current_paragraph).strip()
+        paragraph_text = process_inline(paragraph_text)
 
-        style = ""
-        if indent:
-            style = 'style="text-indent:20px;"'
-
-        return f"<p {style}>{paragraph}</p>"
+        current_paragraph = []
+        return f"<p>{paragraph_text}</p>"
 
     for line in lines:
-        stripped = line.strip()
-
-        # linie goală → închide paragraf
-        if not stripped:
-            if buffer:
-                html.append(flush_paragraph(buffer))
-                buffer = ""
+        if not line.strip():
+            # linie goală → închide paragraf
+            html.append(flush())
             continue
 
-        # detectare "titlu logic" (ex: Introduction, Hydrocodone ...)
-        is_title_like = (
-            len(stripped) < 60 and
-            (stripped[0].isupper() or stripped.endswith(":"))
-        )
+        # detectăm indentarea reală
+        has_indent = len(line) - len(line.lstrip(' ')) > 0
 
-        if is_title_like and buffer:
-            # închide paragraf anterior
-            html.append(flush_paragraph(buffer))
-            buffer = stripped
+        cleaned = line.strip()
+
+        if has_indent:
+            # nou paragraf
+            html.append(flush())
+            current_paragraph = [cleaned]
         else:
-            if buffer:
-                buffer += " " + stripped
-            else:
-                buffer = stripped
+            current_paragraph.append(cleaned)
 
-    if buffer:
-        html.append(flush_paragraph(buffer))
+    html.append(flush())
 
-    return "\n".join(html)
+    return "\n".join([h for h in html if h])
 
 
 def format_bibliography(text):
@@ -165,6 +154,7 @@ def build_html(data):
 
         p {{
             margin: 0 0 10px 0;
+            text-align: justify;
         }}
 
         ol {{
