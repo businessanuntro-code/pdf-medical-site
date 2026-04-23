@@ -3,24 +3,45 @@ from lxml import etree
 
 def _get_text(root, tags):
     """
-    Extrage text păstrând whitespace (inclusiv TAB dacă există în XML)
+    Extrage text păstrând structura de paragrafe dacă există (<p>).
+    Fallback doar dacă XML-ul nu are structuri.
     """
+
     for tag in tags:
         el = root.find(tag)
-        if el is not None:
+        if el is None:
+            continue
 
-            # 🔥 NU mai normalizăm cu " ".join()
-            text = "".join(el.itertext())
+        # 🔥 1. PRIORITATE: paragrafe reale (InDesign / XML structurat)
+        paragraphs = el.findall(".//p")
+        if paragraphs:
+            return "\n".join(
+                " ".join(p.itertext()).strip()
+                for p in paragraphs
+                if " ".join(p.itertext()).strip()
+            )
 
-            if text:
-                return text
+        # 🔥 2. fallback: încearcă break-uri sau text direct pe copii
+        parts = []
+        for node in el:
+            if node.text and node.text.strip():
+                parts.append(node.text.strip())
+
+        if parts:
+            return "\n".join(parts)
+
+        # 🔥 3. ultim fallback (dacă XML e complet plat)
+        text = el.text
+        if text:
+            return text.strip()
 
     return ""
 
 
 def _get_bibliography(root, tags):
     """
-    ⚠️ NESCHIMBAT (conform cerinței tale)
+    Bibliografie:
+    - NU modificăm logica ta existentă (conform cerinței)
     """
     for tag in tags:
         el = root.find(tag)
