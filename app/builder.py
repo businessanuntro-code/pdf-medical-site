@@ -22,26 +22,35 @@ def linkify(text):
     return re.sub(url_pattern, replace, text)
 
 
-def format_bibliography(text):
+def superscript_refs(text):
     """
-    Separă bibliografia pe baza liniilor (fiecare linie = o referință)
-    + face link-urile active
+    Transformă (17) în <sup>17</sup>
     """
 
     if not text:
         return ""
 
-    # separă pe linii
-    lines = text.splitlines()
+    pattern = r'\((\d+)\)'
 
-    # curăță și elimină linii goale
+    return re.sub(pattern, r'<sup>\1</sup>', text)
+
+
+def format_bibliography(text):
+    """
+    Separă bibliografia pe baza liniilor + linkuri active
+    """
+
+    if not text:
+        return ""
+
+    lines = text.splitlines()
     refs = [line.strip() for line in lines if line.strip()]
 
-    # generează HTML
     html = "<ol>"
 
     for ref in refs:
-        ref = linkify(ref)  # 🔥 ACTIVARE LINKURI
+        ref = linkify(ref)
+        ref = superscript_refs(ref)  # 🔥 dacă apar și acolo
         html += f"<li>{ref}</li>"
 
     html += "</ol>"
@@ -53,6 +62,11 @@ def build_html(data):
     """
     Builds article HTML from parsed XML data.
     """
+
+    # 🔥 procesăm conținutul articolului aici
+    continut = data.get('continut_articol', '')
+    continut = linkify(continut)
+    continut = superscript_refs(continut)
 
     return f"""
 <!DOCTYPE html>
@@ -85,6 +99,10 @@ def build_html(data):
         }}
         li {{
             margin-bottom: 12px;
+        }}
+        sup {{
+            font-size: 0.75em;
+            vertical-align: super;
         }}
     </style>
 </head>
@@ -119,7 +137,7 @@ def build_html(data):
     <div class="section">
         <h2>Conținut articol</h2>
         <div>
-            {data.get('continut_articol', '')}
+            {continut}
         </div>
     </div>
 
