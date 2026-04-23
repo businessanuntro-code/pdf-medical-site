@@ -33,37 +33,46 @@ def superscript_refs(text):
     if not text:
         return ""
 
-    # 🔥 prinde orice conținut numeric (cu virgule și spații) în paranteze
     pattern = r'\((\d+(?:\s*,\s*\d+)*)\)'
 
     def replace(match):
         content = match.group(1)
 
-        # curăță spațiile din interior dar păstrează virgulele logice
+        # normalizează spațiile dar păstrează forma logică
         cleaned = re.sub(r'\s+', '', content)
-        cleaned = cleaned.replace(',', ', ')  # normalizare frumoasă
+        cleaned = cleaned.replace(',', ', ')
 
         return f'<sup>{cleaned}</sup>'
 
     return re.sub(pattern, replace, text)
 
 
+def process_text(text):
+    """
+    Pipeline unic pentru continut:
+    - linkuri
+    - superscript
+    """
+    text = linkify(text)
+    text = superscript_refs(text)
+    return text
+
+
 def format_bibliography(text):
     """
-    Bibliografie pe linii + linkuri active + superscript
+    Bibliografie pe linii + linkuri + superscript
     """
 
     if not text:
         return ""
 
     lines = text.splitlines()
-    refs = [line.strip() for line in lines if line.strip()]
+    refs = [line for line in lines if line.strip()]
 
     html = "<ol>"
 
     for ref in refs:
-        ref = linkify(ref)
-        ref = superscript_refs(ref)
+        ref = process_text(ref)
         html += f"<li>{ref}</li>"
 
     html += "</ol>"
@@ -77,8 +86,7 @@ def build_html(data):
     """
 
     continut = data.get('continut_articol', '')
-    continut = linkify(continut)
-    continut = superscript_refs(continut)
+    continut = process_text(continut)
 
     return f"""
 <!DOCTYPE html>
@@ -112,6 +120,12 @@ def build_html(data):
         li {{
             margin-bottom: 12px;
         }}
+
+        /* 🔥 IMPORTANT: păstrează alinierea din XML */
+        .content {{
+            white-space: pre-wrap;
+        }}
+
         sup {{
             font-size: 0.75em;
             vertical-align: super;
@@ -141,7 +155,7 @@ def build_html(data):
 
     <div class="section">
         <h2>Conținut articol</h2>
-        <div>
+        <div class="content">
             {continut}
         </div>
     </div>
