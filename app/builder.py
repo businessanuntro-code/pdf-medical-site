@@ -1,19 +1,29 @@
+import re
+
+
 def format_bibliography(text):
     """
-    Transformă textul brut în listă HTML (o referință pe linie)
+    Detectează automat referințele și le separă corect
     """
+
     if not text:
         return ""
 
-    import re
+    # Normalizează spațiile
+    text = re.sub(r'\n+', ' ', text)
 
-    # separă după numere (1. 2. 3.) sau newline
-    items = re.split(r'\n|\d+\.\s', text)
+    # Split inteligent: detectează începuturi de referințe
+    # bazat pe: Nume, Inițiale. (pattern comun medical)
+    items = re.split(r'(?<=\.)\s+(?=[A-Z][a-zA-Z\-]+,\s?[A-Z])', text)
+
+    # fallback dacă nu merge bine
+    if len(items) < 3:
+        items = re.split(r'\.\s+', text)
 
     # curățare
-    items = [item.strip() for item in items if item.strip()]
+    items = [item.strip() for item in items if len(item.strip()) > 20]
 
-    # generează HTML list
+    # generează HTML numerotat
     html = "<ol>"
     for item in items:
         html += f"<li>{item}</li>"
@@ -65,7 +75,7 @@ def build_html(data):
             padding-left: 20px;
         }}
         li {{
-            margin-bottom: 10px;
+            margin-bottom: 12px;
         }}
     </style>
 </head>
