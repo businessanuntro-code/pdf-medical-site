@@ -3,40 +3,43 @@ import re
 
 def format_bibliography(text):
     """
-    Reface referințele care sunt sparte pe mai multe rânduri
+    Separă bibliografia după 1. 2. 3. etc
     """
 
     if not text:
         return ""
 
-    lines = text.splitlines()
+    # normalizează
+    text = text.replace("\n", " ")
+
+    # split după 1. 2. 3.
+    items = re.split(r'\s*(\d+\.)\s*', text)
 
     refs = []
-    current_ref = ""
+    current = ""
 
-    for line in lines:
-        line = line.strip()
+    for part in items:
+        part = part.strip()
 
-        if not line:
+        if not part:
             continue
 
-        # detectează început de referință (Nume + inițiale)
-        if re.match(r'^[A-Z][a-zA-Z\-]+ [A-Z]{1,3},', line):
-            # salvează referința anterioară
-            if current_ref:
-                refs.append(current_ref.strip())
-            current_ref = line
+        # dacă e număr (ex: "1.")
+        if re.match(r'^\d+\.$', part):
+            if current:
+                refs.append(current.strip())
+            current = part  # începe nouă referință
         else:
-            # continuare referință
-            current_ref += " " + line
+            current += " " + part
 
-    # adaugă ultima
-    if current_ref:
-        refs.append(current_ref.strip())
+    if current:
+        refs.append(current.strip())
 
-    # generează HTML
+    # HTML list
     html = "<ol>"
     for ref in refs:
+        # eliminăm numărul din text (pentru că <ol> îl pune automat)
+        ref = re.sub(r'^\d+\.\s*', '', ref)
         html += f"<li>{ref}</li>"
     html += "</ol>"
 
