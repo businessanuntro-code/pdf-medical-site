@@ -3,8 +3,7 @@ from lxml import etree
 
 def _extract_structured_text(el):
     """
-    Extrage text păstrând separarea REALĂ între noduri XML.
-    (nu mai folosește itertext global)
+    Păstrează structură XML (paragrafe, break-uri etc.)
     """
 
     if el is None:
@@ -14,42 +13,22 @@ def _extract_structured_text(el):
 
     for node in el.iter():
 
-        # detectează paragrafe reale dacă există
         if node.tag == "p":
             text = " ".join(node.itertext()).strip()
             if text:
                 parts.append(text)
 
-        # detectează separatori vizuali
         elif node.tag in ["br", "break"]:
             parts.append("\n")
-
-        # evităm dublarea root textului
-        elif node is el:
-            continue
 
         else:
             if node.text and node.text.strip():
                 parts.append(node.text.strip())
 
-    # curățare: eliminăm empty + dubluri newline
-    cleaned = []
-    last_was_newline = False
-
-    for p in parts:
-        if p == "\n":
-            if not last_was_newline:
-                cleaned.append(p)
-            last_was_newline = True
-        else:
-            cleaned.append(p)
-            last_was_newline = False
-
-    # reconstruire
     result = []
     buffer = []
 
-    for item in cleaned:
+    for item in parts:
         if item == "\n":
             if buffer:
                 result.append(" ".join(buffer).strip())
@@ -65,11 +44,12 @@ def _extract_structured_text(el):
 
 def _get_text(root, tags):
     """
-    Extrage text structurabil (NU flatten)
+    🔥 FIX IMPORTANT: folosim .// ca să găsească orice nivel
     """
 
     for tag in tags:
-        el = root.find(tag)
+        el = root.find(f".//{tag}")  # 🔥 FIX AICI
+
         if el is not None:
             text = _extract_structured_text(el)
             if text:
@@ -79,11 +59,9 @@ def _get_text(root, tags):
 
 
 def _get_bibliography(root, tags):
-    """
-    NESCHIMBAT (cerința ta)
-    """
     for tag in tags:
-        el = root.find(tag)
+        el = root.find(f".//{tag}")  # 🔥 FIX CONSISTENT
+
         if el is None:
             continue
 
