@@ -3,23 +3,24 @@ from lxml import etree
 
 def _get_text(root, tags):
     """
-    Extrage text simplu pentru câmpuri normale
-    (titlu, autori, etc.)
+    Extrage text păstrând whitespace (inclusiv TAB dacă există în XML)
     """
     for tag in tags:
         el = root.find(tag)
         if el is not None:
-            text = " ".join(el.itertext()).strip()
+
+            # 🔥 NU mai normalizăm cu " ".join()
+            text = "".join(el.itertext())
+
             if text:
                 return text
+
     return ""
 
 
 def _get_bibliography(root, tags):
     """
-    Extrage bibliografia corect:
-    - păstrează referințele pe linii separate
-    - funcționează cu InDesign XML (<p>, <br>, etc.)
+    ⚠️ NESCHIMBAT (conform cerinței tale)
     """
     for tag in tags:
         el = root.find(tag)
@@ -28,7 +29,6 @@ def _get_bibliography(root, tags):
 
         refs = []
 
-        # 1. încearcă să ia paragrafe reale
         paragraphs = el.findall(".//p")
         if paragraphs:
             for p in paragraphs:
@@ -36,7 +36,6 @@ def _get_bibliography(root, tags):
                 if text:
                     refs.append(text)
         else:
-            # 2. fallback: încearcă separare pe <br/>
             raw = []
             for node in el.iter():
                 if node.tag == "br":
@@ -48,7 +47,6 @@ def _get_bibliography(root, tags):
             if raw:
                 refs.append(" ".join(raw).strip())
 
-        # 3. fallback final: itertext brut (dar curățat)
         if not refs:
             refs = [
                 t.strip()
@@ -56,7 +54,6 @@ def _get_bibliography(root, tags):
                 if t and t.strip()
             ]
 
-        # elimină dubluri / goale
         refs = [r for r in refs if r]
 
         return "\n".join(refs)
