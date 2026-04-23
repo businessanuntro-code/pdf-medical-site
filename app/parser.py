@@ -1,10 +1,45 @@
 from lxml import etree
 
 
+def _extract_paragraphs(el):
+    """
+    Extrage paragrafe REALISTE din XML chiar dacă nu există <p>
+    """
+
+    if el is None:
+        return []
+
+    paragraphs = []
+
+    buffer = []
+
+    for node in el.iter():
+
+        # dacă există tag de paragraf
+        if node.tag == "p":
+            text = " ".join(node.itertext()).strip()
+            if text:
+                paragraphs.append(text)
+
+        # fallback: detectăm break-uri sau separare logică
+        elif node.tag in ["br", "break"]:
+            if buffer:
+                paragraphs.append(" ".join(buffer).strip())
+                buffer = []
+
+        else:
+            if node.text and node.text.strip():
+                buffer.append(node.text.strip())
+
+    if buffer:
+        paragraphs.append(" ".join(buffer).strip())
+
+    return [p for p in paragraphs if p]
+
+
 def _get_text(root, tags):
     """
-    Extrage text păstrând structura de paragrafe dacă există (<p>).
-    Fallback doar dacă XML-ul nu are structuri.
+    Extrage text păstrând separarea de paragrafe.
     """
 
     for tag in tags:
@@ -12,25 +47,12 @@ def _get_text(root, tags):
         if el is None:
             continue
 
-        # 🔥 1. PRIORITATE: paragrafe reale (InDesign / XML structurat)
-        paragraphs = el.findall(".//p")
+        paragraphs = _extract_paragraphs(el)
+
         if paragraphs:
-            return "\n".join(
-                " ".join(p.itertext()).strip()
-                for p in paragraphs
-                if " ".join(p.itertext()).strip()
-            )
+            return "\n".join(paragraphs)
 
-        # 🔥 2. fallback: încearcă break-uri sau text direct pe copii
-        parts = []
-        for node in el:
-            if node.text and node.text.strip():
-                parts.append(node.text.strip())
-
-        if parts:
-            return "\n".join(parts)
-
-        # 🔥 3. ultim fallback (dacă XML e complet plat)
+        # fallback absolut
         text = el.text
         if text:
             return text.strip()
@@ -40,8 +62,7 @@ def _get_text(root, tags):
 
 def _get_bibliography(root, tags):
     """
-    Bibliografie:
-    - NU modificăm logica ta existentă (conform cerinței)
+    NESCHIMBAT (cum ai cerut)
     """
     for tag in tags:
         el = root.find(tag)
@@ -75,8 +96,6 @@ def _get_bibliography(root, tags):
                 if t and t.strip()
             ]
 
-        refs = [r for r in refs if r]
-
         return "\n".join(refs)
 
     return ""
@@ -86,7 +105,7 @@ def parse_xml(path):
     tree = etree.parse(path)
     root = tree.getroot()
 
-    data = {
+    return {
         "titlu_ro": _get_text(root, ["TitluRo", "TITLU_RO", "titlu_ro", "titlu"]),
         "titlu_en": _get_text(root, ["TitluEn", "TITLU_EN", "titlu_en"]),
         "autori": _get_text(root, ["Autori", "AUTORI", "autori"]),
@@ -119,5 +138,3 @@ def parse_xml(path):
             "bibliografie"
         ]),
     }
-
-    return data
