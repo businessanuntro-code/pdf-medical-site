@@ -3,13 +3,21 @@ from lxml import etree
 
 def _get_text(root, tags):
     """
-    Caută primul tag existent din listă și returnează textul.
-    Ajută când XML-ul nu e perfect standardizat.
+    Caută primul tag existent din listă și returnează TOT textul din el,
+    inclusiv din subtag-uri (<p>, <br>, etc.)
     """
     for tag in tags:
         el = root.find(tag)
-        if el is not None and el.text:
-            return el.text.strip()
+        if el is not None:
+            # ia tot textul inclusiv din copii
+            text = " ".join(el.itertext()).strip()
+
+            # curăță spații multiple
+            text = " ".join(text.split())
+
+            if text:
+                return text
+
     return ""
 
 
@@ -56,7 +64,7 @@ def parse_xml(path):
             "body"
         ]),
 
-        # BIBLIOGRAFIE
+        # BIBLIOGRAFIE (IMPORTANT - acum ia TOT textul)
         "bibliografie": get([
             "Bibliografie",
             "BIBLIOGRAFIE",
