@@ -1,6 +1,31 @@
+import re
+
+
+def linkify(text):
+    """
+    Transformă URL-urile în linkuri HTML active
+    """
+    if not text:
+        return ""
+
+    url_pattern = r'(https?://[^\s]+|www\.[^\s]+)'
+
+    def replace(match):
+        url = match.group(0)
+
+        href = url
+        if url.startswith("www"):
+            href = "https://" + url
+
+        return f'<a href="{href}" target="_blank">{url}</a>'
+
+    return re.sub(url_pattern, replace, text)
+
+
 def format_bibliography(text):
     """
     Separă bibliografia pe baza liniilor (fiecare linie = o referință)
+    + face link-urile active
     """
 
     if not text:
@@ -14,8 +39,11 @@ def format_bibliography(text):
 
     # generează HTML
     html = "<ol>"
+
     for ref in refs:
+        ref = linkify(ref)  # 🔥 ACTIVARE LINKURI
         html += f"<li>{ref}</li>"
+
     html += "</ol>"
 
     return html
