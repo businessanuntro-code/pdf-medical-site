@@ -24,20 +24,33 @@ def linkify(text):
 
 def superscript_refs(text):
     """
-    Transformă (17) în <sup>17</sup>
+    Transformă:
+    (17) → <sup>17</sup>
+    (2,9) → <sup>2,9</sup>
+    (1, 2, 3) → <sup>1, 2, 3</sup>
     """
 
     if not text:
         return ""
 
-    pattern = r'\((\d+)\)'
+    # 🔥 prinde orice conținut numeric (cu virgule și spații) în paranteze
+    pattern = r'\((\d+(?:\s*,\s*\d+)*)\)'
 
-    return re.sub(pattern, r'<sup>\1</sup>', text)
+    def replace(match):
+        content = match.group(1)
+
+        # curăță spațiile din interior dar păstrează virgulele logice
+        cleaned = re.sub(r'\s+', '', content)
+        cleaned = cleaned.replace(',', ', ')  # normalizare frumoasă
+
+        return f'<sup>{cleaned}</sup>'
+
+    return re.sub(pattern, replace, text)
 
 
 def format_bibliography(text):
     """
-    Separă bibliografia pe baza liniilor + linkuri active
+    Bibliografie pe linii + linkuri active + superscript
     """
 
     if not text:
@@ -50,7 +63,7 @@ def format_bibliography(text):
 
     for ref in refs:
         ref = linkify(ref)
-        ref = superscript_refs(ref)  # 🔥 dacă apar și acolo
+        ref = superscript_refs(ref)
         html += f"<li>{ref}</li>"
 
     html += "</ol>"
@@ -63,7 +76,6 @@ def build_html(data):
     Builds article HTML from parsed XML data.
     """
 
-    # 🔥 procesăm conținutul articolului aici
     continut = data.get('continut_articol', '')
     continut = linkify(continut)
     continut = superscript_refs(continut)
@@ -108,32 +120,25 @@ def build_html(data):
 </head>
 <body>
 
-    <!-- TITLU RO -->
     <h1>{data.get('titlu_ro', '')}</h1>
-
-    <!-- TITLU EN -->
     <h2>{data.get('titlu_en', '')}</h2>
 
-    <!-- AUTORI -->
     <div class="meta">
         <b>Autori:</b> {data.get('autori', '')}
     </div>
 
     <hr>
 
-    <!-- ABSTRACT + KEYWORDS -->
     <div class="section">
         <h2>Abstract & Keywords</h2>
         <p>{data.get('abstract_keywords', '')}</p>
     </div>
 
-    <!-- REZUMAT + CUVINTE CHEIE -->
     <div class="section">
         <h2>Rezumat și Cuvinte Cheie</h2>
         <p>{data.get('rezumat_cuvinte_cheie', '')}</p>
     </div>
 
-    <!-- CONTINUT ARTICOL -->
     <div class="section">
         <h2>Conținut articol</h2>
         <div>
@@ -141,7 +146,6 @@ def build_html(data):
         </div>
     </div>
 
-    <!-- BIBLIOGRAFIE -->
     <div class="section">
         <h2>Bibliografie</h2>
         {format_bibliography(data.get('bibliografie', ''))}
