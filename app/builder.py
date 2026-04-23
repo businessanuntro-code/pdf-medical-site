@@ -3,7 +3,7 @@ import re
 
 def linkify(text):
     """
-    Transformă URL-urile în linkuri HTML active
+    URL → link activ
     """
     if not text:
         return ""
@@ -24,11 +24,8 @@ def linkify(text):
 
 def superscript_refs(text):
     """
-    (17) → <sup>17</sup>
-    (2,9) → <sup>2,9</sup>
-    (1, 2, 3) → <sup>1, 2, 3</sup>
+    (17) (2,9) (1, 2, 3) → superscript
     """
-
     if not text:
         return ""
 
@@ -36,19 +33,14 @@ def superscript_refs(text):
 
     def replace(match):
         content = match.group(1)
-
         cleaned = re.sub(r'\s+', '', content)
         cleaned = cleaned.replace(',', ', ')
-
         return f'<sup>{cleaned}</sup>'
 
     return re.sub(pattern, replace, text)
 
 
 def process_inline(text):
-    """
-    linkuri + superscript
-    """
     text = linkify(text)
     text = superscript_refs(text)
     return text
@@ -56,10 +48,12 @@ def process_inline(text):
 
 def format_content(text):
     """
-    🔥 AICI ESTE FIXUL IMPORTANT:
-    - detectează fiecare linie
-    - păstrează indentarea
-    - fiecare linie = paragraf separat
+    🔥 INTELIGENT PARAGRAPH BUILDER:
+
+    Reguli:
+    - linie goală → separă paragraf
+    - linie scurtă (titlu) → paragraf nou indentat
+    - continut → merge în același paragraf
     """
 
     if not text:
@@ -67,31 +61,54 @@ def format_content(text):
 
     lines = text.splitlines()
 
-    html = ""
+    html = []
+    buffer = ""
+
+    def flush_paragraph(paragraph, indent=False):
+        if not paragraph.strip():
+            return ""
+
+        paragraph = process_inline(paragraph.strip())
+
+        style = ""
+        if indent:
+            style = 'style="text-indent:20px;"'
+
+        return f"<p {style}>{paragraph}</p>"
 
     for line in lines:
-        if not line.strip():
+        stripped = line.strip()
+
+        # linie goală → închide paragraf
+        if not stripped:
+            if buffer:
+                html.append(flush_paragraph(buffer))
+                buffer = ""
             continue
 
-        # păstrează spațiile de la început (aliniere)
-        leading_spaces = len(line) - len(line.lstrip(' '))
+        # detectare "titlu logic" (ex: Introduction, Hydrocodone ...)
+        is_title_like = (
+            len(stripped) < 60 and
+            (stripped[0].isupper() or stripped.endswith(":"))
+        )
 
-        content = line.strip()
-        content = process_inline(content)
+        if is_title_like and buffer:
+            # închide paragraf anterior
+            html.append(flush_paragraph(buffer))
+            buffer = stripped
+        else:
+            if buffer:
+                buffer += " " + stripped
+            else:
+                buffer = stripped
 
-        # transformăm spațiile în indent vizual
-        indent_px = leading_spaces * 6  # ajustabil
+    if buffer:
+        html.append(flush_paragraph(buffer))
 
-        html += f'<p style="margin-left:{indent_px}px;">{content}</p>\n'
-
-    return html
+    return "\n".join(html)
 
 
 def format_bibliography(text):
-    """
-    Bibliografie pe linii + linkuri + superscript
-    """
-
     if not text:
         return ""
 
@@ -110,9 +127,6 @@ def format_bibliography(text):
 
 
 def build_html(data):
-    """
-    Builds article HTML from parsed XML data.
-    """
 
     continut = data.get('continut_articol', '')
     continut = format_content(continut)
@@ -123,41 +137,51 @@ def build_html(data):
 <head>
     <meta charset="utf-8">
     <title>{data.get('titlu_ro', 'Articol')}</title>
+
     <style>
         body {{
             font-family: Arial, sans-serif;
             margin: 40px;
             line-height: 1.6;
         }}
+
         h1 {{
             font-size: 28px;
         }}
+
         h2 {{
             margin-top: 30px;
             color: #222;
         }}
+
         .meta {{
             color: #555;
             margin-bottom: 20px;
         }}
+
         .section {{
             margin-bottom: 25px;
         }}
-        ol {{
-            padding-left: 20px;
-        }}
-        li {{
-            margin-bottom: 12px;
-        }}
+
         p {{
             margin: 0 0 10px 0;
         }}
+
+        ol {{
+            padding-left: 20px;
+        }}
+
+        li {{
+            margin-bottom: 12px;
+        }}
+
         sup {{
             font-size: 0.75em;
             vertical-align: super;
         }}
     </style>
 </head>
+
 <body>
 
     <h1>{data.get('titlu_ro', '')}</h1>
