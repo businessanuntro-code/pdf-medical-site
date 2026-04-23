@@ -3,48 +3,47 @@ import re
 
 def format_bibliography(text):
     """
-    Detectează automat referințele și le separă corect
+    Reface referințele care sunt sparte pe mai multe rânduri
     """
 
     if not text:
         return ""
 
-    # Normalizează spațiile
-    text = re.sub(r'\n+', ' ', text)
+    lines = text.splitlines()
 
-    # Split inteligent: detectează începuturi de referințe
-    # bazat pe: Nume, Inițiale. (pattern comun medical)
-    items = re.split(r'(?<=\.)\s+(?=[A-Z][a-zA-Z\-]+,\s?[A-Z])', text)
+    refs = []
+    current_ref = ""
 
-    # fallback dacă nu merge bine
-    if len(items) < 3:
-        items = re.split(r'\.\s+', text)
+    for line in lines:
+        line = line.strip()
 
-    # curățare
-    items = [item.strip() for item in items if len(item.strip()) > 20]
+        if not line:
+            continue
 
-    # generează HTML numerotat
+        # detectează început de referință (Nume + inițiale)
+        if re.match(r'^[A-Z][a-zA-Z\-]+ [A-Z]{1,3},', line):
+            # salvează referința anterioară
+            if current_ref:
+                refs.append(current_ref.strip())
+            current_ref = line
+        else:
+            # continuare referință
+            current_ref += " " + line
+
+    # adaugă ultima
+    if current_ref:
+        refs.append(current_ref.strip())
+
+    # generează HTML
     html = "<ol>"
-    for item in items:
-        html += f"<li>{item}</li>"
+    for ref in refs:
+        html += f"<li>{ref}</li>"
     html += "</ol>"
 
     return html
 
 
 def build_html(data):
-    """
-    Builds article HTML from parsed XML data.
-    Expected keys:
-    - titlu_ro
-    - titlu_en
-    - autori
-    - abstract_keywords
-    - rezumat_cuvinte_cheie
-    - continut_articol
-    - bibliografie
-    """
-
     return f"""
 <!DOCTYPE html>
 <html lang="ro">
@@ -81,32 +80,25 @@ def build_html(data):
 </head>
 <body>
 
-    <!-- TITLU RO -->
     <h1>{data.get('titlu_ro', '')}</h1>
-
-    <!-- TITLU EN -->
     <h2>{data.get('titlu_en', '')}</h2>
 
-    <!-- AUTORI -->
     <div class="meta">
         <b>Autori:</b> {data.get('autori', '')}
     </div>
 
     <hr>
 
-    <!-- ABSTRACT + KEYWORDS -->
     <div class="section">
         <h2>Abstract & Keywords</h2>
         <p>{data.get('abstract_keywords', '')}</p>
     </div>
 
-    <!-- REZUMAT + CUVINTE CHEIE -->
     <div class="section">
         <h2>Rezumat și Cuvinte Cheie</h2>
         <p>{data.get('rezumat_cuvinte_cheie', '')}</p>
     </div>
 
-    <!-- CONTINUT ARTICOL -->
     <div class="section">
         <h2>Conținut articol</h2>
         <div>
@@ -114,7 +106,6 @@ def build_html(data):
         </div>
     </div>
 
-    <!-- BIBLIOGRAFIE -->
     <div class="section">
         <h2>Bibliografie</h2>
         {format_bibliography(data.get('bibliografie', ''))}
