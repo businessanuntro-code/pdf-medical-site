@@ -24,7 +24,6 @@ def linkify(text):
 
 def superscript_refs(text):
     """
-    Transformă:
     (17) → <sup>17</sup>
     (2,9) → <sup>2,9</sup>
     (1, 2, 3) → <sup>1, 2, 3</sup>
@@ -38,7 +37,6 @@ def superscript_refs(text):
     def replace(match):
         content = match.group(1)
 
-        # normalizează spațiile dar păstrează forma logică
         cleaned = re.sub(r'\s+', '', content)
         cleaned = cleaned.replace(',', ', ')
 
@@ -47,15 +45,46 @@ def superscript_refs(text):
     return re.sub(pattern, replace, text)
 
 
-def process_text(text):
+def process_inline(text):
     """
-    Pipeline unic pentru continut:
-    - linkuri
-    - superscript
+    linkuri + superscript
     """
     text = linkify(text)
     text = superscript_refs(text)
     return text
+
+
+def format_content(text):
+    """
+    🔥 AICI ESTE FIXUL IMPORTANT:
+    - detectează fiecare linie
+    - păstrează indentarea
+    - fiecare linie = paragraf separat
+    """
+
+    if not text:
+        return ""
+
+    lines = text.splitlines()
+
+    html = ""
+
+    for line in lines:
+        if not line.strip():
+            continue
+
+        # păstrează spațiile de la început (aliniere)
+        leading_spaces = len(line) - len(line.lstrip(' '))
+
+        content = line.strip()
+        content = process_inline(content)
+
+        # transformăm spațiile în indent vizual
+        indent_px = leading_spaces * 6  # ajustabil
+
+        html += f'<p style="margin-left:{indent_px}px;">{content}</p>\n'
+
+    return html
 
 
 def format_bibliography(text):
@@ -72,7 +101,7 @@ def format_bibliography(text):
     html = "<ol>"
 
     for ref in refs:
-        ref = process_text(ref)
+        ref = process_inline(ref)
         html += f"<li>{ref}</li>"
 
     html += "</ol>"
@@ -86,7 +115,7 @@ def build_html(data):
     """
 
     continut = data.get('continut_articol', '')
-    continut = process_text(continut)
+    continut = format_content(continut)
 
     return f"""
 <!DOCTYPE html>
@@ -120,12 +149,9 @@ def build_html(data):
         li {{
             margin-bottom: 12px;
         }}
-
-        /* 🔥 IMPORTANT: păstrează alinierea din XML */
-        .content {{
-            white-space: pre-wrap;
+        p {{
+            margin: 0 0 10px 0;
         }}
-
         sup {{
             font-size: 0.75em;
             vertical-align: super;
@@ -155,7 +181,7 @@ def build_html(data):
 
     <div class="section">
         <h2>Conținut articol</h2>
-        <div class="content">
+        <div>
             {continut}
         </div>
     </div>
