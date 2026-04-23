@@ -1,68 +1,86 @@
 from lxml import etree
 
 
-def _extract_paragraphs(el):
+def _extract_structured_text(el):
     """
-    Extrage paragrafe REALISTE din XML chiar dacă nu există <p>
+    Extrage text păstrând separarea REALĂ între noduri XML.
+    (nu mai folosește itertext global)
     """
 
     if el is None:
-        return []
+        return ""
 
-    paragraphs = []
-
-    buffer = []
+    parts = []
 
     for node in el.iter():
 
-        # dacă există tag de paragraf
+        # detectează paragrafe reale dacă există
         if node.tag == "p":
             text = " ".join(node.itertext()).strip()
             if text:
-                paragraphs.append(text)
+                parts.append(text)
 
-        # fallback: detectăm break-uri sau separare logică
+        # detectează separatori vizuali
         elif node.tag in ["br", "break"]:
-            if buffer:
-                paragraphs.append(" ".join(buffer).strip())
-                buffer = []
+            parts.append("\n")
+
+        # evităm dublarea root textului
+        elif node is el:
+            continue
 
         else:
             if node.text and node.text.strip():
-                buffer.append(node.text.strip())
+                parts.append(node.text.strip())
+
+    # curățare: eliminăm empty + dubluri newline
+    cleaned = []
+    last_was_newline = False
+
+    for p in parts:
+        if p == "\n":
+            if not last_was_newline:
+                cleaned.append(p)
+            last_was_newline = True
+        else:
+            cleaned.append(p)
+            last_was_newline = False
+
+    # reconstruire
+    result = []
+    buffer = []
+
+    for item in cleaned:
+        if item == "\n":
+            if buffer:
+                result.append(" ".join(buffer).strip())
+                buffer = []
+        else:
+            buffer.append(item)
 
     if buffer:
-        paragraphs.append(" ".join(buffer).strip())
+        result.append(" ".join(buffer).strip())
 
-    return [p for p in paragraphs if p]
+    return "\n".join([r for r in result if r])
 
 
 def _get_text(root, tags):
     """
-    Extrage text păstrând separarea de paragrafe.
+    Extrage text structurabil (NU flatten)
     """
 
     for tag in tags:
         el = root.find(tag)
-        if el is None:
-            continue
-
-        paragraphs = _extract_paragraphs(el)
-
-        if paragraphs:
-            return "\n".join(paragraphs)
-
-        # fallback absolut
-        text = el.text
-        if text:
-            return text.strip()
+        if el is not None:
+            text = _extract_structured_text(el)
+            if text:
+                return text
 
     return ""
 
 
 def _get_bibliography(root, tags):
     """
-    NESCHIMBAT (cum ai cerut)
+    NESCHIMBAT (cerința ta)
     """
     for tag in tags:
         el = root.find(tag)
