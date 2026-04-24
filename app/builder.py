@@ -36,7 +36,6 @@ def superscript_refs(text):
 
 def format_content(text):
     """
-    🔥 REGULI:
     - separă după \u2029 (InDesign)
     - paragraf 1–5 cuvinte + urmat de paragraf lung → bold
     """
@@ -63,7 +62,6 @@ def format_content(text):
             if len(next_words) > 8:
                 next_is_long = True
 
-        # 🔥 UPDATE: 1–5 cuvinte
         if 1 <= word_count <= 5 and next_is_long:
             html.append(f"<p><b>{processed}</b></p>")
         else:
@@ -94,6 +92,17 @@ def build_html(data):
 
     continut = data.get('continut_articol', '')
     continut = format_content(continut)
+
+    # 🔥 aplicăm italic doar aici (NU afectăm altceva)
+    abstract = data.get('abstract_keywords', '')
+    abstract = linkify(abstract)
+    abstract = superscript_refs(abstract)
+    abstract = f"<i>{abstract}</i>" if abstract else ""
+
+    rezumat = data.get('rezumat_cuvinte_cheie', '')
+    rezumat = linkify(rezumat)
+    rezumat = superscript_refs(rezumat)
+    rezumat = f"<i>{rezumat}</i>" if rezumat else ""
 
     return f"""
 <!DOCTYPE html>
@@ -150,12 +159,12 @@ def build_html(data):
 
     <div class="section">
         <h2>Abstract & Keywords</h2>
-        <p>{data.get('abstract_keywords', '')}</p>
+        <p>{abstract}</p>
     </div>
 
     <div class="section">
         <h2>Rezumat și Cuvinte Cheie</h2>
-        <p>{data.get('rezumat_cuvinte_cheie', '')}</p>
+        <p>{rezumat}</p>
     </div>
 
     <div class="section">
