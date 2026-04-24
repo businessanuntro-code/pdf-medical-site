@@ -35,9 +35,6 @@ def superscript_refs(text):
 
 
 def superscript_symbols(text):
-    """
-    Transformă ™ și ® în superscript
-    """
     if not text:
         return ""
 
@@ -47,11 +44,27 @@ def superscript_symbols(text):
     return text
 
 
+def preserve_formatting(text):
+    """
+    🔥 păstrează și normalizează stilurile:
+    bold, italic, underline
+    """
+
+    if not text:
+        return ""
+
+    # normalizează variante HTML
+    text = text.replace("<strong>", "<b>").replace("</strong>", "</b>")
+    text = text.replace("<em>", "<i>").replace("</em>", "</i>")
+
+    return text
+
+
 def format_content(text):
     """
     - separă după \u2029 (InDesign)
     - paragraf 1–5 cuvinte + urmat de paragraf lung → bold
-    - aplică linkuri, superscript refs și simboluri
+    - păstrează bold / italic / underline din XML
     """
 
     if not text:
@@ -64,16 +77,18 @@ def format_content(text):
 
     for i, line in enumerate(lines):
 
-        processed = linkify(line)
+        processed = preserve_formatting(line)  # 🔥 NOU
+        processed = linkify(processed)
         processed = superscript_refs(processed)
-        processed = superscript_symbols(processed)  # 🔥 NOU
+        processed = superscript_symbols(processed)
 
-        words = line.split()
+        words = re.sub(r'<.*?>', '', line).split()  # fără tag-uri la numărare
         word_count = len(words)
 
         next_is_long = False
         if i + 1 < len(lines):
-            next_words = lines[i + 1].split()
+            next_line_clean = re.sub(r'<.*?>', '', lines[i + 1])
+            next_words = next_line_clean.split()
             if len(next_words) > 8:
                 next_is_long = True
 
@@ -109,12 +124,14 @@ def build_html(data):
     continut = format_content(continut)
 
     abstract = data.get('abstract_keywords', '')
+    abstract = preserve_formatting(abstract)
     abstract = linkify(abstract)
     abstract = superscript_refs(abstract)
     abstract = superscript_symbols(abstract)
     abstract = f"<i>{abstract}</i>" if abstract else ""
 
     rezumat = data.get('rezumat_cuvinte_cheie', '')
+    rezumat = preserve_formatting(rezumat)
     rezumat = linkify(rezumat)
     rezumat = superscript_refs(rezumat)
     rezumat = superscript_symbols(rezumat)
@@ -149,6 +166,9 @@ def build_html(data):
         p {{
             margin: 0 0 10px 0;
             text-align: justify;
+        }}
+        u {{
+            text-decoration: underline;
         }}
         ol {{
             padding-left: 20px;
