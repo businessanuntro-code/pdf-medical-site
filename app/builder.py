@@ -26,23 +26,19 @@ def superscript_refs(text):
     """
     Transformă:
     (17) → <sup>17</sup>
-    (2,9) → <sup>2,9</sup>
+    (2,9) → <sup>2, 9</sup>
     (1, 2, 3) → <sup>1, 2, 3</sup>
     """
 
     if not text:
         return ""
 
-    # 🔥 prinde orice conținut numeric (cu virgule și spații) în paranteze
     pattern = r'\((\d+(?:\s*,\s*\d+)*)\)'
 
     def replace(match):
         content = match.group(1)
-
-        # curăță spațiile din interior dar păstrează virgulele logice
         cleaned = re.sub(r'\s+', '', content)
-        cleaned = cleaned.replace(',', ', ')  # normalizare frumoasă
-
+        cleaned = cleaned.replace(',', ', ')
         return f'<sup>{cleaned}</sup>'
 
     return re.sub(pattern, replace, text)
@@ -50,7 +46,7 @@ def superscript_refs(text):
 
 def format_bibliography(text):
     """
-    Bibliografie pe linii + linkuri active + superscript
+    Bibliografie pe linii + linkuri active (FĂRĂ superscript)
     """
 
     if not text:
@@ -63,7 +59,7 @@ def format_bibliography(text):
 
     for ref in refs:
         ref = linkify(ref)
-        ref = superscript_refs(ref)
+        # 🔥 AM ELIMINAT superscript_refs(ref)
         html += f"<li>{ref}</li>"
 
     html += "</ol>"
