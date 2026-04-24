@@ -2,9 +2,6 @@ import re
 
 
 def linkify(text):
-    """
-    Transformă URL-urile în linkuri HTML active
-    """
     if not text:
         return ""
 
@@ -23,13 +20,6 @@ def linkify(text):
 
 
 def superscript_refs(text):
-    """
-    Transformă:
-    (17) → <sup>17</sup>
-    (2,9) → <sup>2, 9</sup>
-    (1, 2, 3) → <sup>1, 2, 3</sup>
-    """
-
     if not text:
         return ""
 
@@ -46,38 +36,46 @@ def superscript_refs(text):
 
 def format_content(text):
     """
-    🔥 FIX FINAL:
-    Separă paragrafele folosind separatorul InDesign (U+2029)
+    🔥 REGULI:
+    - separă după \u2029 (InDesign)
+    - detectează titluri scurte (2–5 cuvinte)
+    - dacă următorul paragraf e lung → bold
     """
 
     if not text:
         return ""
 
-    # 🔥 CHEIA: convertim separatorul InDesign în newline
+    # separator InDesign
     text = text.replace("\u2029", "\n")
-
-    lines = text.splitlines()
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
 
     html = []
 
-    for line in lines:
-        if not line.strip():
-            continue
+    for i, line in enumerate(lines):
 
-        line = line.strip()
-        line = linkify(line)
-        line = superscript_refs(line)
+        processed = linkify(line)
+        processed = superscript_refs(processed)
 
-        html.append(f"<p>{line}</p>")
+        words = line.split()
+        word_count = len(words)
+
+        # verificăm următorul paragraf
+        next_is_long = False
+        if i + 1 < len(lines):
+            next_words = lines[i + 1].split()
+            if len(next_words) > 8:  # prag pentru "paragraf lung"
+                next_is_long = True
+
+        # 🔥 condiția ta
+        if 2 <= word_count <= 5 and next_is_long:
+            html.append(f"<p><b>{processed}</b></p>")
+        else:
+            html.append(f"<p>{processed}</p>")
 
     return "\n".join(html)
 
 
 def format_bibliography(text):
-    """
-    Bibliografie pe linii + linkuri active (FĂRĂ superscript)
-    """
-
     if not text:
         return ""
 
@@ -96,9 +94,6 @@ def format_bibliography(text):
 
 
 def build_html(data):
-    """
-    Builds article HTML from parsed XML data.
-    """
 
     continut = data.get('continut_articol', '')
     continut = format_content(continut)
