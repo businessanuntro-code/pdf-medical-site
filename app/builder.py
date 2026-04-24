@@ -34,10 +34,24 @@ def superscript_refs(text):
     return re.sub(pattern, replace, text)
 
 
+def superscript_symbols(text):
+    """
+    Transformă ™ și ® în superscript
+    """
+    if not text:
+        return ""
+
+    text = text.replace("™", "<sup>™</sup>")
+    text = text.replace("®", "<sup>®</sup>")
+
+    return text
+
+
 def format_content(text):
     """
     - separă după \u2029 (InDesign)
     - paragraf 1–5 cuvinte + urmat de paragraf lung → bold
+    - aplică linkuri, superscript refs și simboluri
     """
 
     if not text:
@@ -52,6 +66,7 @@ def format_content(text):
 
         processed = linkify(line)
         processed = superscript_refs(processed)
+        processed = superscript_symbols(processed)  # 🔥 NOU
 
         words = line.split()
         word_count = len(words)
@@ -93,15 +108,16 @@ def build_html(data):
     continut = data.get('continut_articol', '')
     continut = format_content(continut)
 
-    # 🔥 aplicăm italic doar aici (NU afectăm altceva)
     abstract = data.get('abstract_keywords', '')
     abstract = linkify(abstract)
     abstract = superscript_refs(abstract)
+    abstract = superscript_symbols(abstract)
     abstract = f"<i>{abstract}</i>" if abstract else ""
 
     rezumat = data.get('rezumat_cuvinte_cheie', '')
     rezumat = linkify(rezumat)
     rezumat = superscript_refs(rezumat)
+    rezumat = superscript_symbols(rezumat)
     rezumat = f"<i>{rezumat}</i>" if rezumat else ""
 
     return f"""
