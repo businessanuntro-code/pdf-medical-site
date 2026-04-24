@@ -46,52 +46,31 @@ def superscript_refs(text):
 
 def format_content(text):
     """
-    🔥 REGULA:
-    - linie cu spațiu la început → paragraf nou
-    - linie fără spațiu → continuă paragraf
+    🔥 FIX FINAL:
+    Separă paragrafele folosind separatorul InDesign (U+2029)
     """
 
     if not text:
         return ""
 
+    # 🔥 CHEIA: convertim separatorul InDesign în newline
+    text = text.replace("\u2029", "\n")
+
     lines = text.splitlines()
 
     html = []
-    buffer = []
-
-    def flush():
-        nonlocal buffer
-
-        if not buffer:
-            return ""
-
-        paragraph = " ".join(buffer).strip()
-        paragraph = linkify(paragraph)
-        paragraph = superscript_refs(paragraph)
-
-        buffer = []
-        return f"<p>{paragraph}</p>"
 
     for line in lines:
-
         if not line.strip():
-            html.append(flush())
             continue
 
-        # 🔥 detectare spațiu la început
-        has_indent = line.startswith(" ")
+        line = line.strip()
+        line = linkify(line)
+        line = superscript_refs(line)
 
-        cleaned = line.lstrip().strip()
+        html.append(f"<p>{line}</p>")
 
-        if has_indent:
-            html.append(flush())
-            buffer = [cleaned]
-        else:
-            buffer.append(cleaned)
-
-    html.append(flush())
-
-    return "\n".join([h for h in html if h])
+    return "\n".join(html)
 
 
 def format_bibliography(text):
