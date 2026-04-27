@@ -3,34 +3,50 @@ from lxml import etree
 
 def _clean_image_src(src: str) -> str:
     """
-    Transformă:
-    file:///C:/Users/.../tabel1.jpg
-    în:
-    tabel1.jpg
+    Normalizează sursa imaginii:
+    - file:///...
+    - GitHub blob → raw URL
     """
 
     if not src:
         return ""
 
-    # ia doar ultimul segment din path
-    src = src.replace("\\", "/")
-    filename = src.split("/")[-1]
+    src = src.strip()
 
-    return filename
+    # -----------------------------
+    # 1. GitHub blob → raw
+    # -----------------------------
+    if "github.com" in src and "/blob/" in src:
+        src = src.replace("github.com", "raw.githubusercontent.com")
+        src = src.replace("/blob/", "/")
+
+    # -----------------------------
+    # 2. file:///
+    # -----------------------------
+    if src.startswith("file:///"):
+        src = src.replace("file:///", "")
+
+        # ia doar filename
+        src = src.replace("\\", "/")
+        src = src.split("/")[-1]
+
+    # -----------------------------
+    # 3. normalize path → filename dacă e local
+    # -----------------------------
+    elif "/" in src and not src.startswith("http"):
+        src = src.split("/")[-1]
+
+    return src
 
 
 def _convert_inline_styles(node):
     """
-    Transformă XML → HTML inline:
-    italic → <i>
-    bold → <b>
-    underline → <u>
-    image → <img>
+    Transform XML → HTML inline
+    + imagini cu URL corect
     """
 
     parts = []
 
-    # text înainte de copii
     if node.text:
         parts.append(node.text)
 
@@ -73,10 +89,6 @@ def _convert_inline_styles(node):
 
 
 def _get_text(root, tags):
-    """
-    Extrage text + păstrează ordinea imaginilor + stiluri inline
-    """
-
     for tag in tags:
         el = root.find(tag)
         if el is not None:
@@ -87,10 +99,6 @@ def _get_text(root, tags):
 
 
 def _get_bibliography(root, tags):
-    """
-    Bibliografie + stiluri inline (fără imagini aici de obicei)
-    """
-
     for tag in tags:
         el = root.find(tag)
         if el is None:
