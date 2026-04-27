@@ -8,51 +8,52 @@ def _clean_image_src(src: str) -> str:
         return ""
 
     src = src.strip().replace("\\", "/")
+
     filename = src.split("/")[-1]
 
     return IMAGE_BASE_URL + filename
 
 
-def _convert_inline_styles(node):
+def _extract_images(root):
     """
-    🔥 VERSION STABILĂ (NU STRICĂ ORDER DIN XML)
+    🔥 FIX IMPORTANT:
+    extrage imagini DIN ORICE LOC din XML
     """
+    images = []
 
+    for img in root.findall(".//image"):
+        src = img.attrib.get("href") or img.attrib.get("src")
+        final = _clean_image_src(src)
+        if final:
+            images.append(f'<figure><img src="{final}" /></figure>')
+
+    return "\n".join(images)
+
+
+def _convert_inline_styles(node):
     parts = []
 
-    # text înainte de copii
     if node.text:
         parts.append(node.text)
 
     for child in node:
 
         tag = child.tag.lower() if isinstance(child.tag, str) else ""
+        child_text = _convert_inline_styles(child)
 
-        # 🔥 IMAGINE INLINE (CORECT)
-        if tag in ["image", "img"]:
-            src = child.attrib.get("href") or child.attrib.get("src")
-            final = _clean_image_src(src)
-
-            if final:
-                parts.append(
-                    f'<figure style="text-align:left;margin:15px 0;">'
-                    f'<img src="{final}" style="max-width:100%;height:auto;display:block;" />'
-                    f'</figure>'
-                )
-
-        elif tag in ["italic", "i"]:
-            parts.append(f"<i>{_convert_inline_styles(child)}</i>")
+        if tag in ["italic", "i"]:
+            parts.append(f"<i>{child_text}</i>")
 
         elif tag in ["bold", "b"]:
-            parts.append(f"<b>{_convert_inline_styles(child)}</b>")
+            parts.append(f"<b>{child_text}</b>")
 
         elif tag in ["underline", "u"]:
-            parts.append(f"<u>{_convert_inline_styles(child)}</u>")
+            parts.append(f"<u>{child_text}</u>")
 
+        # ❌ nu mai procesăm imagine aici (IMPORTANT)
         else:
-            parts.append(_convert_inline_styles(child))
+            parts.append(child_text)
 
-        # 🔥 CRITICAL FIX (AICI ERA PROBLEMA TA)
         if child.tail:
             parts.append(child.tail)
 
@@ -70,8 +71,20 @@ def _get_text(root, tags):
 def _get_bibliography(root, tags):
     for tag in tags:
         el = root.find(tag)
-        if el is not None:
-            return _convert_inline_styles(el).strip()
+        if el is None:
+            continue
+
+        refs = []
+        paragraphs = el.findall(".//p")
+
+        if paragraphs:
+            for p in paragraphs:
+                refs.append(_convert_inline_styles(p).strip())
+        else:
+            refs.append(_convert_inline_styles(el).strip())
+
+        return "\n".join([r for r in refs if r])
+
     return ""
 
 
@@ -87,7 +100,10 @@ def parse_xml(path):
         "abstract_keywords": _get_text(root, ["abstract_keywords", "abstract"]),
         "rezumat_cuvinte_cheie": _get_text(root, ["rezumat_cuvinte_cheie", "rezumat"]),
 
-        "continut_articol": _get_text(root, ["continut_articol"]),
+        "continut_articol": _get_text(root, ["continut_articol", "body", "content"]),
 
         "bibliografie": _get_bibliography(root, ["bibliografie"]),
+
+        # 🔥 NOU: imagini separate
+        "imagini": _extract_images(root)
     }
