@@ -2,13 +2,6 @@ from lxml import etree
 
 
 def _convert_inline_styles(node):
-    """
-    Transformă tag-urile XML în HTML inline:
-    <italic> → <i>
-    <bold> → <b>
-    <underline> → <u>
-    """
-
     parts = []
 
     # text înainte de copii
@@ -39,29 +32,23 @@ def _convert_inline_styles(node):
     return "".join(parts)
 
 
+# 🔥 FIX IMPORTANT: NU mai returna doar primul match, ci concatenează corect
 def _get_text(root, tags):
-    """
-    Extrage text + păstrează stiluri inline (italic/bold/underline)
-    fără să strice compatibilitatea existentă.
-    """
+    result = []
 
     for tag in tags:
-        el = root.find(tag)
-        if el is not None:
+        for el in root.findall(".//" + tag):
             text = _convert_inline_styles(el).strip()
             if text:
-                return text
-    return ""
+                result.append(text)
+
+    return "\n".join(result)
 
 
+# 🔥 FIX SAFE NODE HANDLING (InDesign mix content fix)
 def _get_bibliography(root, tags):
-    """
-    Extrage bibliografia corect:
-    - păstrează referințele pe linii separate
-    - funcționează cu InDesign XML (<p>, <br>, etc.)
-    """
     for tag in tags:
-        el = root.find(tag)
+        el = root.find(".//" + tag)
         if el is None:
             continue
 
@@ -76,22 +63,18 @@ def _get_bibliography(root, tags):
         else:
             raw = []
             for node in el.iter():
-                if node.tag == "br":
+
+                if isinstance(node.tag, str) and node.tag == "br":
                     refs.append(" ".join(raw).strip())
                     raw = []
-                elif node.text:
+
+                if node.text:
                     raw.append(node.text)
 
             if raw:
                 refs.append(" ".join(raw).strip())
 
-        if not refs:
-            refs = [
-                _convert_inline_styles(el).strip()
-            ]
-
-        refs = [r for r in refs if r]
-        return "\n".join(refs)
+        return "\n".join([r for r in refs if r])
 
     return ""
 
