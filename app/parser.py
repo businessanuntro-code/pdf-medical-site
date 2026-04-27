@@ -7,113 +7,106 @@ IMAGE_BASE_URL = "https://raw.githubusercontent.com/businessanuntro-code/pdf-med
 
 
 def _clean_image_src(src: str) -> str:
-    """
-    Extrage numele fișierului și îl transformă în URL final.
-    """
-
     if not src:
         return ""
 
     src = src.strip().replace("\\", "/")
-
-    # ia doar filename
     filename = src.split("/")[-1]
 
     return IMAGE_BASE_URL + filename
 
 
-# =========================
-# 🔥 FIX PRINCIPAL: PARCURGERE COMPLETĂ XML
-# =========================
-def _convert_full_node(node):
+def _is_image_tag(tag: str) -> bool:
     """
-    Transformă XML → HTML păstrând:
-    - text
-    - bold / italic / underline
-    - imagini în ordinea corectă
+    FIX CRITIC:
+    InDesign / XML poate trimite:
+    Image, image, IMG, {ns}Image etc.
     """
+    if not tag:
+        return False
 
+    tag = tag.lower()
+    return "image" in tag or "img" in tag
+
+
+def _convert_inline_styles(node):
     parts = []
 
-    # text înainte de copii
     if node.text:
         parts.append(node.text)
 
     for child in node:
 
         tag = child.tag.lower() if isinstance(child.tag, str) else ""
+        child_text = _convert_inline_styles(child)
 
-        # -------------------------
         # TEXT STYLES
-        # -------------------------
         if tag in ["italic", "i"]:
-            parts.append(f"<i>{_convert_full_node(child)}</i>")
+            parts.append(f"<i>{child_text}</i>")
 
         elif tag in ["bold", "b"]:
-            parts.append(f"<b>{_convert_full_node(child)}</b>")
+            parts.append(f"<b>{child_text}</b>")
 
         elif tag in ["underline", "u"]:
-            parts.append(f"<u>{_convert_full_node(child)}</u>")
+            parts.append(f"<u>{child_text}</u>")
 
-        # -------------------------
-        # IMAGINI (FIX FINAL)
-        # -------------------------
-        elif tag in ["image", "img"]:
+        # IMAGE FIX REAL
+        elif _is_image_tag(tag):
 
             src = child.attrib.get("href") or child.attrib.get("src")
             final_src = _clean_image_src(src)
 
             if final_src:
-                parts.append(f"""
-<figure>
-    <img src="{final_src}" style="max-width:100%;height:auto;" />
-</figure>
-""")
+                parts.append(f'<figure><img src="{final_src}" /></figure>')
 
-        # -------------------------
-        # TABLE (passthrough brut XML → HTML simplu)
-        # -------------------------
-        elif tag in ["table", "tabel"]:
-            parts.append(etree.tostring(child, encoding="unicode"))
-
-        # -------------------------
-        # fallback
-        # -------------------------
         else:
-            parts.append(_convert_full_node(child))
+            parts.append(child_text)
 
-        # tail text
         if child.tail:
             parts.append(child.tail)
 
     return "".join(parts)
 
 
+def _get_text(root, tags):
+    for tag in tags:
+        el = root.find(tag)
+        if el is not None:
+            return _convert_inline_styles(el).strip()
+    return ""
+
+
+def _get_bibliography(root, tags):
+    for tag in tags:
+        el = root.find(tag)
+        if el is None:
+            continue
+
+        refs = []
+        for p in el.findall(".//p"):
+            txt = _convert_inline_styles(p).strip()
+            if txt:
+                refs.append(txt)
+
+        if refs:
+            return "\n".join(refs)
+
+    return ""
+
+
 def parse_xml(path):
     tree = etree.parse(path)
     root = tree.getroot()
 
-    # =========================
-    # META CAMPURI
-    # =========================
-    data = {
-        "titlu_ro": root.findtext("titlu_ro", ""),
-        "titlu_en": root.findtext("titlu_en", ""),
-        "autori": root.findtext("autori", ""),
+    return {
+        "titlu_ro": _get_text(root, ["titlu_ro", "TitluRo", "TITLU_RO"]),
+        "titlu_en": _get_text(root, ["titlu_en", "TitluEn", "TITLU_EN"]),
+        "autori": _get_text(root, ["autori", "Autori", "AUTORI"]),
 
-        "abstract_keywords": root.findtext("abstract_keywords", ""),
-        "rezumat_cuvinte_cheie": root.findtext("rezumat_cuvinte_cheie", ""),
-        "bibliografie": root.findtext("bibliografie", ""),
+        "abstract_keywords": _get_text(root, ["abstract_keywords", "AbstractKeywords"]),
+        "rezumat_cuvinte_cheie": _get_text(root, ["rezumat_cuvinte_cheie", "RezumatCuvinteCheie"]),
+
+        "continut_articol": _get_text(root, ["continut_articol", "ContinutArticol", "body", "content"]),
+
+        "bibliografie": _get_bibliography(root, ["bibliografie", "Bibliografie"]),
     }
-
-    # =========================
-    # 🔥 FIX IMPORTANT: CONTINUT COMPLET XML (nu _get_text)
-    # =========================
-    continut_node = root.find("continut_articol")
-
-    if continut_node is not None:
-        data["continut_articol"] = _convert_full_node(continut_node)
-    else:
-        data["continut_articol"] = ""
-
-    return data
