@@ -1,11 +1,13 @@
 from lxml import etree
 
 
+# 🔥 BASE IMAGE PATH (o poți schimba ulterior)
+IMAGE_BASE_URL = "/static/images/"
+
+
 def _clean_image_src(src: str) -> str:
     """
-    Normalizează sursa imaginii:
-    - file:///...
-    - GitHub blob → raw URL
+    Extrage numele fișierului și aplică un base path controlat.
     """
 
     if not src:
@@ -13,36 +15,26 @@ def _clean_image_src(src: str) -> str:
 
     src = src.strip()
 
-    # -----------------------------
-    # 1. GitHub blob → raw
-    # -----------------------------
+    # GitHub blob → raw (opțional, dar păstrăm)
     if "github.com" in src and "/blob/" in src:
         src = src.replace("github.com", "raw.githubusercontent.com")
         src = src.replace("/blob/", "/")
 
-    # -----------------------------
-    # 2. file:///
-    # -----------------------------
+    # file:///
     if src.startswith("file:///"):
         src = src.replace("file:///", "")
-
-        # ia doar filename
         src = src.replace("\\", "/")
-        src = src.split("/")[-1]
 
-    # -----------------------------
-    # 3. normalize path → filename dacă e local
-    # -----------------------------
-    elif "/" in src and not src.startswith("http"):
-        src = src.split("/")[-1]
+    # ia doar filename
+    filename = src.split("/")[-1]
 
-    return src
+    # 👉 FORȚĂM SURSA LOCALĂ / CONTROLATĂ
+    return IMAGE_BASE_URL + filename
 
 
 def _convert_inline_styles(node):
     """
-    Transform XML → HTML inline
-    + imagini cu URL corect
+    XML → HTML inline + imagini cu src controlat
     """
 
     parts = []
@@ -56,7 +48,7 @@ def _convert_inline_styles(node):
         child_text = _convert_inline_styles(child)
 
         # -------------------------
-        # TEXT STYLES
+        # STILURI TEXT
         # -------------------------
         if tag in ["italic", "i"]:
             parts.append(f"<i>{child_text}</i>")
@@ -68,7 +60,7 @@ def _convert_inline_styles(node):
             parts.append(f"<u>{child_text}</u>")
 
         # -------------------------
-        # IMAGES
+        # IMAGINI
         # -------------------------
         elif tag in ["image", "img"]:
 
