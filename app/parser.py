@@ -1,36 +1,41 @@
 from lxml import etree
 
+
+# =========================
+# 🔥 IMAGE CONFIG (ADĂUGAT)
+# =========================
 IMAGE_BASE_URL = "https://raw.githubusercontent.com/businessanuntro-code/pdf-medical-site/main/uploads/"
 
 
 def _clean_image_src(src: str) -> str:
+    """
+    Normalizează sursa imaginii:
+    - file:///
+    - local path
+    - github path
+    → transformă în URL final
+    """
+
     if not src:
         return ""
 
     src = src.strip().replace("\\", "/")
 
+    # ia doar numele fișierului
     filename = src.split("/")[-1]
 
     return IMAGE_BASE_URL + filename
 
 
-def _extract_images(root):
-    """
-    🔥 FIX IMPORTANT:
-    extrage imagini DIN ORICE LOC din XML
-    """
-    images = []
-
-    for img in root.findall(".//image"):
-        src = img.attrib.get("href") or img.attrib.get("src")
-        final = _clean_image_src(src)
-        if final:
-            images.append(f'<figure><img src="{final}" /></figure>')
-
-    return "\n".join(images)
-
-
 def _convert_inline_styles(node):
+    """
+    Transformă tag-urile XML în HTML inline:
+    <italic> → <i>
+    <bold> → <b>
+    <underline> → <u>
+    + 🔥 IMAGINI (ADĂUGAT)
+    """
+
     parts = []
 
     if node.text:
@@ -39,8 +44,12 @@ def _convert_inline_styles(node):
     for child in node:
 
         tag = child.tag.lower() if isinstance(child.tag, str) else ""
+
         child_text = _convert_inline_styles(child)
 
+        # -------------------------
+        # STILURI TEXT
+        # -------------------------
         if tag in ["italic", "i"]:
             parts.append(f"<i>{child_text}</i>")
 
@@ -50,7 +59,20 @@ def _convert_inline_styles(node):
         elif tag in ["underline", "u"]:
             parts.append(f"<u>{child_text}</u>")
 
-        # ❌ nu mai procesăm imagine aici (IMPORTANT)
+        # -------------------------
+        # 🔥 IMAGINI (NOUL FIX)
+        # -------------------------
+        elif tag in ["image", "img"]:
+
+            src = child.attrib.get("href") or child.attrib.get("src")
+            final_src = _clean_image_src(src)
+
+            if final_src:
+                parts.append(
+                    f'<img src="{final_src}" style="max-width:100%;height:auto;display:block;margin:15px 0;" />'
+                )
+
+        # fallback
         else:
             parts.append(child_text)
 
@@ -64,7 +86,9 @@ def _get_text(root, tags):
     for tag in tags:
         el = root.find(tag)
         if el is not None:
-            return _convert_inline_styles(el).strip()
+            text = _convert_inline_styles(el).strip()
+            if text:
+                return text
     return ""
 
 
@@ -75,15 +99,30 @@ def _get_bibliography(root, tags):
             continue
 
         refs = []
-        paragraphs = el.findall(".//p")
 
+        paragraphs = el.findall(".//p")
         if paragraphs:
             for p in paragraphs:
-                refs.append(_convert_inline_styles(p).strip())
+                text = _convert_inline_styles(p).strip()
+                if text:
+                    refs.append(text)
         else:
-            refs.append(_convert_inline_styles(el).strip())
+            raw = []
+            for node in el.iter():
+                if node.tag == "br":
+                    refs.append(" ".join(raw).strip())
+                    raw = []
+                elif node.text:
+                    raw.append(node.text)
 
-        return "\n".join([r for r in refs if r])
+            if raw:
+                refs.append(" ".join(raw).strip())
+
+        if not refs:
+            refs = [_convert_inline_styles(el).strip()]
+
+        refs = [r for r in refs if r]
+        return "\n".join(refs)
 
     return ""
 
@@ -92,18 +131,38 @@ def parse_xml(path):
     tree = etree.parse(path)
     root = tree.getroot()
 
-    return {
-        "titlu_ro": _get_text(root, ["titlu_ro", "TitluRo"]),
-        "titlu_en": _get_text(root, ["titlu_en", "TitluEn"]),
-        "autori": _get_text(root, ["autori", "Autori"]),
+    data = {
+        "titlu_ro": _get_text(root, ["TitluRo", "TITLU_RO", "titlu_ro", "titlu"]),
+        "titlu_en": _get_text(root, ["TitluEn", "TITLU_EN", "titlu_en"]),
+        "autori": _get_text(root, ["Autori", "AUTORI", "autori"]),
 
-        "abstract_keywords": _get_text(root, ["abstract_keywords", "abstract"]),
-        "rezumat_cuvinte_cheie": _get_text(root, ["rezumat_cuvinte_cheie", "rezumat"]),
+        "abstract_keywords": _get_text(root, [
+            "AbstractKeywords",
+            "Abstract-Keywords",
+            "abstract_keywords",
+            "abstract"
+        ]),
 
-        "continut_articol": _get_text(root, ["continut_articol", "body", "content"]),
+        "rezumat_cuvinte_cheie": _get_text(root, [
+            "RezumatCuvinteCheie",
+            "Rezumat-Cuvinte-Cheie",
+            "rezumat_cuvinte_cheie",
+            "rezumat"
+        ]),
 
-        "bibliografie": _get_bibliography(root, ["bibliografie"]),
+        "continut_articol": _get_text(root, [
+            "ContinutArticol",
+            "Continut-articol",
+            "continut_articol",
+            "continut",
+            "body"
+        ]),
 
-        # 🔥 NOU: imagini separate
-        "imagini": _extract_images(root)
+        "bibliografie": _get_bibliography(root, [
+            "Bibliografie",
+            "BIBLIOGRAFIE",
+            "bibliografie"
+        ]),
     }
+
+    return data
