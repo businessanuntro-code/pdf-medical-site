@@ -24,6 +24,7 @@ def superscript_refs(text):
     def replace(match):
         content = match.group(1)
         cleaned = re.sub(r'\s+', '', content)
+        cleaned = cleaned.replace(',', ', ')
         return f'<sup>{cleaned}</sup>'
 
     return re.sub(pattern, replace, text)
@@ -32,15 +33,18 @@ def superscript_refs(text):
 def superscript_symbols(text):
     if not text:
         return ""
-    return text.replace("™", "<sup>™</sup>").replace("®", "<sup>®</sup>")
+
+    text = text.replace("™", "<sup>™</sup>")
+    text = text.replace("®", "<sup>®</sup>")
+    return text
 
 
+# 🔥 FIX: păstrăm logica veche de "titlu scurt + paragraf lung => bold"
 def format_content(text):
     if not text:
         return ""
 
     text = text.replace("\u2029", "\n")
-
     lines = [line.strip() for line in text.splitlines() if line.strip()]
 
     html = []
@@ -51,7 +55,20 @@ def format_content(text):
         processed = superscript_refs(processed)
         processed = superscript_symbols(processed)
 
-        html.append(f"<p>{processed}</p>")
+        words = line.split()
+        word_count = len(words)
+
+        next_is_long = False
+        if i + 1 < len(lines):
+            next_words = lines[i + 1].split()
+            if len(next_words) > 8:
+                next_is_long = True
+
+        # 🔥 LOGICA ORIGINALĂ RESTAURATĂ
+        if 1 <= word_count <= 5 and next_is_long:
+            html.append(f"<p><b>{processed}</b></p>")
+        else:
+            html.append(f"<p>{processed}</p>")
 
     return "\n".join(html)
 
@@ -60,11 +77,12 @@ def format_bibliography(text):
     if not text:
         return ""
 
-    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
 
     html = "<ol>"
-    for r in lines:
-        html += f"<li>{linkify(r)}</li>"
+    for ref in lines:
+        ref = linkify(ref)
+        html += f"<li>{ref}</li>"
     html += "</ol>"
 
     return html
@@ -72,48 +90,119 @@ def format_bibliography(text):
 
 def build_html(data):
 
-    continut = format_content(data.get("continut_articol", ""))
+    continut = format_content(data.get('continut_articol', ''))
 
-    # 🔥 IMAGINI INJECTATE AICI
+    abstract = data.get('abstract_keywords', '')
+    abstract = superscript_symbols(superscript_refs(linkify(abstract)))
+    abstract = f"<i>{abstract}</i>" if abstract else ""
+
+    rezumat = data.get('rezumat_cuvinte_cheie', '')
+    rezumat = superscript_symbols(superscript_refs(linkify(rezumat)))
+    rezumat = f"<i>{rezumat}</i>" if rezumat else ""
+
     imagini = data.get("imagini", "")
-
-    abstract = data.get("abstract_keywords", "")
-    abstract = f"<i>{superscript_symbols(superscript_refs(linkify(abstract)))}</i>"
-
-    rezumat = data.get("rezumat_cuvinte_cheie", "")
-    rezumat = f"<i>{superscript_symbols(superscript_refs(linkify(rezumat)))}</i>"
 
     return f"""
 <!DOCTYPE html>
 <html lang="ro">
 <head>
-<meta charset="utf-8">
-<title>{data.get("titlu_ro","Articol")}</title>
+    <meta charset="utf-8">
+    <title>{data.get('titlu_ro', 'Articol')}</title>
 
-<style>
-body {{ font-family: Arial; margin: 40px; line-height: 1.6; }}
-img {{ max-width: 100%; height: auto; }}
-figure {{ text-align:center; margin:20px 0; }}
-</style>
+    <style>
+        body {{
+            font-family: Arial, sans-serif;
+            margin: 40px;
+            line-height: 1.6;
+        }}
+
+        h1 {{
+            font-size: 28px;
+        }}
+
+        h2 {{
+            margin-top: 30px;
+            color: #222;
+        }}
+
+        .meta {{
+            color: #555;
+            margin-bottom: 20px;
+        }}
+
+        .section {{
+            margin-bottom: 25px;
+        }}
+
+        p {{
+            margin: 0 0 10px 0;
+            text-align: justify;
+        }}
+
+        ol {{
+            padding-left: 20px;
+        }}
+
+        li {{
+            margin-bottom: 12px;
+        }}
+
+        sup {{
+            font-size: 0.75em;
+            vertical-align: super;
+        }}
+
+        /* 🔥 IMAGINI ALINIATE LA STÂNGA */
+        figure {{
+            margin: 20px 0;
+            text-align: left;
+        }}
+
+        figure img {{
+            max-width: 100%;
+            height: auto;
+            display: block;
+        }}
+    </style>
 </head>
 
 <body>
 
-<h1>{data.get("titlu_ro","")}</h1>
-<h2>{data.get("titlu_en","")}</h2>
+    <h1>{data.get('titlu_ro', '')}</h1>
+    <h2>{data.get('titlu_en', '')}</h2>
 
-<div><b>Autori:</b> {data.get("autori","")}</div>
+    <div class="meta">
+        <b>Autori:</b> {data.get('autori', '')}
+    </div>
 
-<hr>
+    <hr>
 
-<div><h2>Abstract</h2><p>{abstract}</p></div>
-<div><h2>Rezumat</h2><p>{rezumat}</p></div>
+    <div class="section">
+        <h2>Abstract & Keywords</h2>
+        <p>{abstract}</p>
+    </div>
 
-<div><h2>Conținut</h2>{continut}</div>
+    <div class="section">
+        <h2>Rezumat și Cuvinte Cheie</h2>
+        <p>{rezumat}</p>
+    </div>
 
-{imagini}   <!-- 🔥 FIX CRITIC -->
+    <div class="section">
+        <h2>Conținut articol</h2>
+        <div>
+            {continut}
+        </div>
+    </div>
 
-<div><h2>Bibliografie</h2>{format_bibliography(data.get("bibliografie",""))}</div>
+    <!-- 🔥 IMAGINI INJECTATE SEPARAT -->
+    <div class="section">
+        {imagini}
+    </div>
+
+    <div class="section">
+        <h2>Bibliografie</h2>
+        {format_bibliography(data.get('bibliografie', ''))}
+    </div>
 
 </body>
 </html>
