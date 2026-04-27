@@ -1,8 +1,5 @@
 from lxml import etree
 
-# =========================
-# CONFIG IMAGINI
-# =========================
 IMAGE_BASE_URL = "https://raw.githubusercontent.com/businessanuntro-code/pdf-medical-site/main/uploads/"
 
 
@@ -17,19 +14,16 @@ def _clean_image_src(src: str) -> str:
 
 
 def _is_image_tag(tag: str) -> bool:
-    """
-    FIX CRITIC:
-    InDesign / XML poate trimite:
-    Image, image, IMG, {ns}Image etc.
-    """
     if not tag:
         return False
-
     tag = tag.lower()
     return "image" in tag or "img" in tag
 
 
-def _convert_inline_styles(node):
+# =========================
+# CONTINUT + ABSTRACT
+# =========================
+def _convert_inline(node):
     parts = []
 
     if node.text:
@@ -38,9 +32,8 @@ def _convert_inline_styles(node):
     for child in node:
 
         tag = child.tag.lower() if isinstance(child.tag, str) else ""
-        child_text = _convert_inline_styles(child)
+        child_text = _convert_inline(child)
 
-        # TEXT STYLES
         if tag in ["italic", "i"]:
             parts.append(f"<i>{child_text}</i>")
 
@@ -50,14 +43,12 @@ def _convert_inline_styles(node):
         elif tag in ["underline", "u"]:
             parts.append(f"<u>{child_text}</u>")
 
-        # IMAGE FIX REAL
         elif _is_image_tag(tag):
-
             src = child.attrib.get("href") or child.attrib.get("src")
             final_src = _clean_image_src(src)
 
             if final_src:
-                parts.append(f'<figure><img src="{final_src}" /></figure>')
+                parts.append(f'<figure><img src="{final_src}"/></figure>')
 
         else:
             parts.append(child_text)
@@ -68,14 +59,9 @@ def _convert_inline_styles(node):
     return "".join(parts)
 
 
-def _get_text(root, tags):
-    for tag in tags:
-        el = root.find(tag)
-        if el is not None:
-            return _convert_inline_styles(el).strip()
-    return ""
-
-
+# =========================
+# BIBLIOGRAFIE (SAFE MODE)
+# =========================
 def _get_bibliography(root, tags):
     for tag in tags:
         el = root.find(tag)
@@ -83,14 +69,25 @@ def _get_bibliography(root, tags):
             continue
 
         refs = []
-        for p in el.findall(".//p"):
-            txt = _convert_inline_styles(p).strip()
-            if txt:
-                refs.append(txt)
+
+        # IMPORTANT: DOAR TEXT PLAIN
+        for item in el.iter():
+            if item.text and item.tag not in ["Bibliografie", "bibliografie"]:
+                line = item.text.strip()
+                if line:
+                    refs.append(line)
 
         if refs:
             return "\n".join(refs)
 
+    return ""
+
+
+def _get_text(root, tags):
+    for tag in tags:
+        el = root.find(tag)
+        if el is not None:
+            return _convert_inline(el).strip()
     return ""
 
 
