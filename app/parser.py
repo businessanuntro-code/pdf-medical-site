@@ -1,12 +1,12 @@
 from lxml import etree
 
-# 🔥 BASE IMAGE PATH (o poți schimba ulterior)
+# 🔥 BASE IMAGE PATH
 IMAGE_BASE_URL = "/static/images/"
 
 
 def _clean_image_src(src: str) -> str:
     """
-    Extrage numele fișierului și aplică un base path controlat.
+    Normalizează path imagine → filename + base URL
     """
 
     if not src:
@@ -31,7 +31,7 @@ def _clean_image_src(src: str) -> str:
 
 def _convert_inline_styles(node):
     """
-    XML → HTML inline + imagini ca FIGURE
+    XML → HTML inline (text + images + styles)
     """
 
     parts = []
@@ -42,6 +42,7 @@ def _convert_inline_styles(node):
     for child in node:
 
         tag = child.tag.lower() if isinstance(child.tag, str) else ""
+
         child_text = _convert_inline_styles(child)
 
         # -------------------------
@@ -57,29 +58,15 @@ def _convert_inline_styles(node):
             parts.append(f"<u>{child_text}</u>")
 
         # -------------------------
-        # IMAGINI → FIGURE (IMPORTANT)
+        # IMAGINI → FIGURE (IMPORTANT FIX)
         # -------------------------
         elif tag in ["image", "img"]:
 
             src = child.attrib.get("href") or child.attrib.get("src")
             src = _clean_image_src(src)
 
-            caption = ""
-
-            # încearcă caption dacă există
-            for c in child:
-                if c.tag.lower() in ["caption", "title", "figcaption"]:
-                    caption = " ".join(c.itertext()).strip()
-
             if src:
-                figure_html = f'<figure><img src="{src}" />'
-
-                if caption:
-                    figure_html += f'<figcaption>{caption}</figcaption>'
-
-                figure_html += '</figure>'
-
-                parts.append(figure_html)
+                parts.append(f'<figure><img src="{src}" /></figure>')
 
         # fallback
         else:
@@ -91,7 +78,50 @@ def _convert_inline_styles(node):
     return "".join(parts)
 
 
+# 🔥 NEW FUNCTION (CRITICAL FIX FOR ORDER + IMAGES)
+def _get_full_content(root, tags):
+    """
+    Păstrează ordinea reală din InDesign:
+    text + imagini + tabele
+    """
+
+    for tag in tags:
+        el = root.find(tag)
+        if el is None:
+            continue
+
+        parts = []
+
+        for node in el.iter():
+
+            tag_name = node.tag.lower() if isinstance(node.tag, str) else ""
+
+            # TEXT
+            if node.text and node.text.strip():
+                parts.append(node.text)
+
+            # IMAGINE
+            if tag_name in ["image", "img"]:
+
+                src = node.attrib.get("href") or node.attrib.get("src")
+                src = _clean_image_src(src)
+
+                if src:
+                    parts.append(f'<figure><img src="{src}" /></figure>')
+
+            # TABLE passthrough (nu îl strică)
+            if tag_name == "table":
+                parts.append(etree.tostring(node, encoding="unicode"))
+
+        return "".join(parts)
+
+    return ""
+
+
 def _get_text(root, tags):
+    """
+    fallback text (fără imagini)
+    """
     for tag in tags:
         el = root.find(tag)
         if el is not None:
@@ -159,7 +189,8 @@ def parse_xml(path):
             "rezumat"
         ]),
 
-        "continut_articol": _get_text(root, [
+        # 🔥 IMPORTANT FIX HERE
+        "continut_articol": _get_full_content(root, [
             "ContinutArticol",
             "Continut-articol",
             "continut_articol",
