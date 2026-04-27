@@ -43,16 +43,21 @@ def superscript_symbols(text):
     return text
 
 
-# 🔥 FIX MAJOR: detectare HTML REAL (nu doar img/figure)
-def contains_html(text):
-    return any(tag in text for tag in ["<img", "<figure", "<table", "<sup", "<a"])
+# =========================
+# FIX STABIL: detectare HTML real
+# =========================
+def is_html(text):
+    if not text:
+        return False
+
+    return any(tag in text for tag in ["<img", "<figure", "<table", "<a ", "<sup"])
 
 
 def format_content(text):
     """
-    FIX FINAL:
-    - dacă e HTML → NU îl modificăm deloc
-    - dacă e text → îl procesăm normal
+    REGULA FINALĂ:
+    - dacă vine HTML din parser → NU îl modificăm
+    - dacă e text simplu → îl procesăm
     """
 
     if not text:
@@ -60,8 +65,8 @@ def format_content(text):
 
     text = text.replace("\u2029", "\n")
 
-    # 🔥 IMPORTANT FIX
-    if contains_html(text):
+    # 🔥 IMPORTANT: NU strica HTML-ul din parser
+    if is_html(text):
         return text
 
     lines = [line.strip() for line in text.splitlines() if line.strip()]
@@ -112,8 +117,6 @@ def format_bibliography(text):
 def build_html(data):
 
     continut = data.get('continut_articol', '')
-
-    # 🔥 IMPORTANT: NU mai strica HTML-ul din parser
     continut = format_content(continut)
 
     abstract = data.get('abstract_keywords', '')
@@ -134,58 +137,76 @@ def build_html(data):
 <head>
     <meta charset="utf-8">
     <title>{data.get('titlu_ro', 'Articol')}</title>
+
     <style>
         body {{
             font-family: Arial, sans-serif;
             margin: 40px;
             line-height: 1.6;
+            background: #f7f7f7;
         }}
+
+        .container {{
+            background: white;
+            padding: 30px;
+            max-width: 900px;
+            margin: auto;
+        }}
+
         h1 {{
             font-size: 28px;
+            color: #222;
         }}
+
         h2 {{
             margin-top: 30px;
             color: #222;
         }}
+
         .meta {{
             color: #555;
             margin-bottom: 20px;
         }}
+
         .section {{
             margin-bottom: 25px;
         }}
+
         p {{
             margin: 0 0 10px 0;
             text-align: justify;
         }}
+
         ol {{
             padding-left: 20px;
         }}
+
         li {{
             margin-bottom: 12px;
         }}
+
         sup {{
             font-size: 0.75em;
             vertical-align: super;
+        }}
+
+        /* 🔥 IMAGINI FIX FINAL */
+        img {{
+            max-width: 100%;
+            display: block;
+            margin: 20px auto;
         }}
 
         figure {{
             margin: 20px 0;
             text-align: center;
         }}
-
-        figure img {{
-            max-width: 100%;
-            height: auto;
-        }}
-
-        figcaption {{
-            font-size: 0.9em;
-            color: #666;
-        }}
     </style>
 </head>
+
 <body>
+
+<div class="container">
 
     <h1>{data.get('titlu_ro', '')}</h1>
     <h2>{data.get('titlu_en', '')}</h2>
@@ -217,6 +238,8 @@ def build_html(data):
         <h2>Bibliografie</h2>
         {format_bibliography(data.get('bibliografie', ''))}
     </div>
+
+</div>
 
 </body>
 </html>
