@@ -1,6 +1,5 @@
 from lxml import etree
 
-
 # 🔥 BASE IMAGE PATH (o poți schimba ulterior)
 IMAGE_BASE_URL = "/static/images/"
 
@@ -15,7 +14,7 @@ def _clean_image_src(src: str) -> str:
 
     src = src.strip()
 
-    # GitHub blob → raw (opțional, dar păstrăm)
+    # GitHub blob → raw (opțional)
     if "github.com" in src and "/blob/" in src:
         src = src.replace("github.com", "raw.githubusercontent.com")
         src = src.replace("/blob/", "/")
@@ -25,16 +24,14 @@ def _clean_image_src(src: str) -> str:
         src = src.replace("file:///", "")
         src = src.replace("\\", "/")
 
-    # ia doar filename
     filename = src.split("/")[-1]
 
-    # 👉 FORȚĂM SURSA LOCALĂ / CONTROLATĂ
     return IMAGE_BASE_URL + filename
 
 
 def _convert_inline_styles(node):
     """
-    XML → HTML inline + imagini cu src controlat
+    XML → HTML inline + imagini ca FIGURE
     """
 
     parts = []
@@ -48,7 +45,7 @@ def _convert_inline_styles(node):
         child_text = _convert_inline_styles(child)
 
         # -------------------------
-        # STILURI TEXT
+        # TEXT STYLES
         # -------------------------
         if tag in ["italic", "i"]:
             parts.append(f"<i>{child_text}</i>")
@@ -60,15 +57,29 @@ def _convert_inline_styles(node):
             parts.append(f"<u>{child_text}</u>")
 
         # -------------------------
-        # IMAGINI
+        # IMAGINI → FIGURE (IMPORTANT)
         # -------------------------
         elif tag in ["image", "img"]:
 
             src = child.attrib.get("href") or child.attrib.get("src")
             src = _clean_image_src(src)
 
+            caption = ""
+
+            # încearcă caption dacă există
+            for c in child:
+                if c.tag.lower() in ["caption", "title", "figcaption"]:
+                    caption = " ".join(c.itertext()).strip()
+
             if src:
-                parts.append(f'<img src="{src}" />')
+                figure_html = f'<figure><img src="{src}" />'
+
+                if caption:
+                    figure_html += f'<figcaption>{caption}</figcaption>'
+
+                figure_html += '</figure>'
+
+                parts.append(figure_html)
 
         # fallback
         else:
