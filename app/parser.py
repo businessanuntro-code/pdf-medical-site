@@ -7,6 +7,7 @@ def _convert_inline_styles(node):
     <italic> → <i>
     <bold> → <b>
     <underline> → <u>
+    + suport pentru image / figure / caption
     """
 
     parts = []
@@ -21,6 +22,7 @@ def _convert_inline_styles(node):
 
         child_text = _convert_inline_styles(child)
 
+        # 🟢 TEXT STYLES
         if tag in ["italic", "i"]:
             parts.append(f"<i>{child_text}</i>")
 
@@ -30,6 +32,21 @@ def _convert_inline_styles(node):
         elif tag in ["underline", "u"]:
             parts.append(f"<u>{child_text}</u>")
 
+        # 🟢 IMAGE
+        elif tag == "image":
+            src = child.attrib.get("href") or child.attrib.get("src")
+            if src:
+                parts.append(f'<img src="{src}" />')
+
+        # 🟢 CAPTION
+        elif tag == "caption":
+            parts.append(f"<figcaption>{child_text}</figcaption>")
+
+        # 🟢 FIGURE (container)
+        elif tag == "figure":
+            parts.append(f"<figure>{child_text}</figure>")
+
+        # fallback
         else:
             parts.append(child_text)
 
@@ -42,7 +59,7 @@ def _convert_inline_styles(node):
 def _get_text(root, tags):
     """
     Extrage text + păstrează stiluri inline (italic/bold/underline)
-    fără să strice compatibilitatea existentă.
+    + imagini + caption + figure
     """
 
     for tag in tags:
@@ -60,6 +77,7 @@ def _get_bibliography(root, tags):
     - păstrează referințele pe linii separate
     - funcționează cu InDesign XML (<p>, <br>, etc.)
     """
+
     for tag in tags:
         el = root.find(tag)
         if el is None:
