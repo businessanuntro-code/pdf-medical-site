@@ -43,23 +43,27 @@ def superscript_symbols(text):
     return text
 
 
-# 🔥 IMPORTANT FIX: detectăm HTML (figure/img) și NU îl rupem
+# 🔥 FIX MAJOR: detectare HTML REAL (nu doar img/figure)
+def contains_html(text):
+    return any(tag in text for tag in ["<img", "<figure", "<table", "<sup", "<a"])
+
+
 def format_content(text):
     """
-    FIXED:
-    - NU mai sparge <figure>
-    - NU mai pierde <img>
-    - păstrează HTML din parser
+    FIX FINAL:
+    - dacă e HTML → NU îl modificăm deloc
+    - dacă e text → îl procesăm normal
     """
 
     if not text:
         return ""
 
-    # 🔥 dacă vine deja HTML (din parser), îl returnăm direct
-    if "<figure" in text or "<img" in text or "<table" in text:
+    text = text.replace("\u2029", "\n")
+
+    # 🔥 IMPORTANT FIX
+    if contains_html(text):
         return text
 
-    text = text.replace("\u2029", "\n")
     lines = [line.strip() for line in text.splitlines() if line.strip()]
 
     html = []
@@ -109,7 +113,7 @@ def build_html(data):
 
     continut = data.get('continut_articol', '')
 
-    # 🔥 FIX: continutul poate conține HTML (figures, images)
+    # 🔥 IMPORTANT: NU mai strica HTML-ul din parser
     continut = format_content(continut)
 
     abstract = data.get('abstract_keywords', '')
@@ -165,7 +169,6 @@ def build_html(data):
             vertical-align: super;
         }}
 
-        /* 🔥 IMPORTANT pentru imagini */
         figure {{
             margin: 20px 0;
             text-align: center;
