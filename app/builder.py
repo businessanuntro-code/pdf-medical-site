@@ -35,27 +35,29 @@ def superscript_refs(text):
 
 
 def superscript_symbols(text):
-    """
-    Transformă ™ și ® în superscript
-    """
     if not text:
         return ""
 
     text = text.replace("™", "<sup>™</sup>")
     text = text.replace("®", "<sup>®</sup>")
-
     return text
 
 
+# 🔥 IMPORTANT FIX: detectăm HTML (figure/img) și NU îl rupem
 def format_content(text):
     """
-    - separă după \u2029 (InDesign)
-    - paragraf 1–5 cuvinte + urmat de paragraf lung → bold
-    - aplică linkuri, superscript refs și simboluri
+    FIXED:
+    - NU mai sparge <figure>
+    - NU mai pierde <img>
+    - păstrează HTML din parser
     """
 
     if not text:
         return ""
+
+    # 🔥 dacă vine deja HTML (din parser), îl returnăm direct
+    if "<figure" in text or "<img" in text or "<table" in text:
+        return text
 
     text = text.replace("\u2029", "\n")
     lines = [line.strip() for line in text.splitlines() if line.strip()]
@@ -66,7 +68,7 @@ def format_content(text):
 
         processed = linkify(line)
         processed = superscript_refs(processed)
-        processed = superscript_symbols(processed)  # 🔥 NOU
+        processed = superscript_symbols(processed)
 
         words = line.split()
         word_count = len(words)
@@ -106,6 +108,8 @@ def format_bibliography(text):
 def build_html(data):
 
     continut = data.get('continut_articol', '')
+
+    # 🔥 FIX: continutul poate conține HTML (figures, images)
     continut = format_content(continut)
 
     abstract = data.get('abstract_keywords', '')
@@ -159,6 +163,22 @@ def build_html(data):
         sup {{
             font-size: 0.75em;
             vertical-align: super;
+        }}
+
+        /* 🔥 IMPORTANT pentru imagini */
+        figure {{
+            margin: 20px 0;
+            text-align: center;
+        }}
+
+        figure img {{
+            max-width: 100%;
+            height: auto;
+        }}
+
+        figcaption {{
+            font-size: 0.9em;
+            color: #666;
         }}
     </style>
 </head>
