@@ -1,27 +1,14 @@
 from lxml import etree
 
 
-# =========================
-# 🔥 IMAGE CONFIG (ADĂUGAT)
-# =========================
 IMAGE_BASE_URL = "https://raw.githubusercontent.com/businessanuntro-code/pdf-medical-site/main/uploads/"
 
 
 def _clean_image_src(src: str) -> str:
-    """
-    Normalizează sursa imaginii:
-    - file:///
-    - local path
-    - github path
-    → transformă în URL final
-    """
-
     if not src:
         return ""
 
     src = src.strip().replace("\\", "/")
-
-    # ia doar numele fișierului
     filename = src.split("/")[-1]
 
     return IMAGE_BASE_URL + filename
@@ -30,10 +17,6 @@ def _clean_image_src(src: str) -> str:
 def _convert_inline_styles(node):
     """
     Transformă tag-urile XML în HTML inline:
-    <italic> → <i>
-    <bold> → <b>
-    <underline> → <u>
-    + 🔥 IMAGINI (ADĂUGAT)
     """
 
     parts = []
@@ -47,9 +30,6 @@ def _convert_inline_styles(node):
 
         child_text = _convert_inline_styles(child)
 
-        # -------------------------
-        # STILURI TEXT
-        # -------------------------
         if tag in ["italic", "i"]:
             parts.append(f"<i>{child_text}</i>")
 
@@ -59,20 +39,21 @@ def _convert_inline_styles(node):
         elif tag in ["underline", "u"]:
             parts.append(f"<u>{child_text}</u>")
 
-        # -------------------------
-        # 🔥 IMAGINI (NOUL FIX)
-        # -------------------------
+        # 🔥 FIX IMAGINI (NO CRASH SAFE)
         elif tag in ["image", "img"]:
 
-            src = child.attrib.get("href") or child.attrib.get("src")
-            final_src = _clean_image_src(src)
+            try:
+                src = child.attrib.get("href") or child.attrib.get("src")
 
-            if final_src:
-                parts.append(
-                    f'<img src="{final_src}" style="max-width:100%;height:auto;display:block;margin:15px 0;" />'
-                )
+                if src:
+                    final_src = _clean_image_src(src)
 
-        # fallback
+                    parts.append(
+                        f'<figure><img src="{final_src}" style="max-width:100%;height:auto;display:block;margin:10px 0;"/></figure>'
+                    )
+            except:
+                pass
+
         else:
             parts.append(child_text)
 
@@ -138,29 +119,25 @@ def parse_xml(path):
 
         "abstract_keywords": _get_text(root, [
             "AbstractKeywords",
-            "Abstract-Keywords",
             "abstract_keywords",
             "abstract"
         ]),
 
         "rezumat_cuvinte_cheie": _get_text(root, [
             "RezumatCuvinteCheie",
-            "Rezumat-Cuvinte-Cheie",
             "rezumat_cuvinte_cheie",
             "rezumat"
         ]),
 
         "continut_articol": _get_text(root, [
             "ContinutArticol",
-            "Continut-articol",
             "continut_articol",
-            "continut",
-            "body"
+            "body",
+            "content"
         ]),
 
         "bibliografie": _get_bibliography(root, [
             "Bibliografie",
-            "BIBLIOGRAFIE",
             "bibliografie"
         ]),
     }
