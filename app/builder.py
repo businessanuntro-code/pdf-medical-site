@@ -9,7 +9,11 @@ def linkify(text):
 
     def replace(match):
         url = match.group(0)
-        href = url if not url.startswith("www") else "https://" + url
+
+        href = url
+        if url.startswith("www"):
+            href = "https://" + url
+
         return f'<a href="{href}" target="_blank">{url}</a>'
 
     return re.sub(url_pattern, replace, text)
@@ -31,16 +35,49 @@ def superscript_refs(text):
 
 
 def superscript_symbols(text):
+    """
+    Transformă ™ și ® în superscript
+    """
     if not text:
         return ""
 
     text = text.replace("™", "<sup>™</sup>")
     text = text.replace("®", "<sup>®</sup>")
+
     return text
 
 
-# 🔥 FIX: păstrăm logica veche de "titlu scurt + paragraf lung => bold"
+# =========================
+# 🔥 NOU: IMAGE HANDLER
+# =========================
+def style_images(text):
+    """
+    Detectează <img> și le pune într-un wrapper controlat
+    (aliniere stânga + spacing)
+    """
+    if not text:
+        return ""
+
+    def replace(match):
+        img_tag = match.group(0)
+
+        return f'''
+        <div style="text-align:left; margin:15px 0;">
+            {img_tag}
+        </div>
+        '''
+
+    return re.sub(r'<img[^>]*>', replace, text)
+
+
 def format_content(text):
+    """
+    - separă după \u2029 (InDesign)
+    - paragraf 1–5 cuvinte + urmat de paragraf lung → bold
+    - aplică linkuri, superscript refs și simboluri
+    - 🔥 IMAGINI SUPORTATE
+    """
+
     if not text:
         return ""
 
@@ -55,6 +92,9 @@ def format_content(text):
         processed = superscript_refs(processed)
         processed = superscript_symbols(processed)
 
+        # 🔥 IMAGINI
+        processed = style_images(processed)
+
         words = line.split()
         word_count = len(words)
 
@@ -64,7 +104,6 @@ def format_content(text):
             if len(next_words) > 8:
                 next_is_long = True
 
-        # 🔥 LOGICA ORIGINALĂ RESTAURATĂ
         if 1 <= word_count <= 5 and next_is_long:
             html.append(f"<p><b>{processed}</b></p>")
         else:
@@ -77,12 +116,15 @@ def format_bibliography(text):
     if not text:
         return ""
 
-    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    lines = text.splitlines()
+    refs = [line.strip() for line in lines if line.strip()]
 
     html = "<ol>"
-    for ref in lines:
+
+    for ref in refs:
         ref = linkify(ref)
         html += f"<li>{ref}</li>"
+
     html += "</ol>"
 
     return html
@@ -90,17 +132,20 @@ def format_bibliography(text):
 
 def build_html(data):
 
-    continut = format_content(data.get('continut_articol', ''))
+    continut = data.get('continut_articol', '')
+    continut = format_content(continut)
 
     abstract = data.get('abstract_keywords', '')
-    abstract = superscript_symbols(superscript_refs(linkify(abstract)))
+    abstract = linkify(abstract)
+    abstract = superscript_refs(abstract)
+    abstract = superscript_symbols(abstract)
     abstract = f"<i>{abstract}</i>" if abstract else ""
 
     rezumat = data.get('rezumat_cuvinte_cheie', '')
-    rezumat = superscript_symbols(superscript_refs(linkify(rezumat)))
+    rezumat = linkify(rezumat)
+    rezumat = superscript_refs(rezumat)
+    rezumat = superscript_symbols(rezumat)
     rezumat = f"<i>{rezumat}</i>" if rezumat else ""
-
-    imagini = data.get("imagini", "")
 
     return f"""
 <!DOCTYPE html>
@@ -108,64 +153,50 @@ def build_html(data):
 <head>
     <meta charset="utf-8">
     <title>{data.get('titlu_ro', 'Articol')}</title>
-
     <style>
         body {{
             font-family: Arial, sans-serif;
             margin: 40px;
             line-height: 1.6;
         }}
-
         h1 {{
             font-size: 28px;
         }}
-
         h2 {{
             margin-top: 30px;
             color: #222;
         }}
-
         .meta {{
             color: #555;
             margin-bottom: 20px;
         }}
-
         .section {{
             margin-bottom: 25px;
         }}
-
         p {{
             margin: 0 0 10px 0;
             text-align: justify;
         }}
-
         ol {{
             padding-left: 20px;
         }}
-
         li {{
             margin-bottom: 12px;
         }}
-
         sup {{
             font-size: 0.75em;
             vertical-align: super;
         }}
 
-        /* 🔥 IMAGINI ALINIATE LA STÂNGA */
-        figure {{
-            margin: 20px 0;
-            text-align: left;
-        }}
-
-        figure img {{
+        /* 🔥 IMAGINI */
+        img {
             max-width: 100%;
             height: auto;
             display: block;
-        }}
+        }
+
     </style>
 </head>
-
 <body>
 
     <h1>{data.get('titlu_ro', '')}</h1>
@@ -192,11 +223,6 @@ def build_html(data):
         <div>
             {continut}
         </div>
-    </div>
-
-    <!-- 🔥 IMAGINI INJECTATE SEPARAT -->
-    <div class="section">
-        {imagini}
     </div>
 
     <div class="section">
