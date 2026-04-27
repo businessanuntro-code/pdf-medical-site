@@ -1,13 +1,31 @@
 from lxml import etree
 
 
+def _clean_image_src(src: str) -> str:
+    """
+    Transformă:
+    file:///C:/Users/.../tabel1.jpg
+    în:
+    tabel1.jpg
+    """
+
+    if not src:
+        return ""
+
+    # ia doar ultimul segment din path
+    src = src.replace("\\", "/")
+    filename = src.split("/")[-1]
+
+    return filename
+
+
 def _convert_inline_styles(node):
     """
-    Transformă tag-urile XML în HTML inline:
-    <italic> → <i>
-    <bold> → <b>
-    <underline> → <u>
-    + suport pentru image / figure / caption
+    Transformă XML → HTML inline:
+    italic → <i>
+    bold → <b>
+    underline → <u>
+    image → <img>
     """
 
     parts = []
@@ -19,10 +37,11 @@ def _convert_inline_styles(node):
     for child in node:
 
         tag = child.tag.lower() if isinstance(child.tag, str) else ""
-
         child_text = _convert_inline_styles(child)
 
-        # 🟢 TEXT STYLES
+        # -------------------------
+        # TEXT STYLES
+        # -------------------------
         if tag in ["italic", "i"]:
             parts.append(f"<i>{child_text}</i>")
 
@@ -32,19 +51,16 @@ def _convert_inline_styles(node):
         elif tag in ["underline", "u"]:
             parts.append(f"<u>{child_text}</u>")
 
-        # 🟢 IMAGE
-        elif tag == "image":
+        # -------------------------
+        # IMAGES
+        # -------------------------
+        elif tag in ["image", "img"]:
+
             src = child.attrib.get("href") or child.attrib.get("src")
+            src = _clean_image_src(src)
+
             if src:
                 parts.append(f'<img src="{src}" />')
-
-        # 🟢 CAPTION
-        elif tag == "caption":
-            parts.append(f"<figcaption>{child_text}</figcaption>")
-
-        # 🟢 FIGURE (container)
-        elif tag == "figure":
-            parts.append(f"<figure>{child_text}</figure>")
 
         # fallback
         else:
@@ -58,8 +74,7 @@ def _convert_inline_styles(node):
 
 def _get_text(root, tags):
     """
-    Extrage text + păstrează stiluri inline (italic/bold/underline)
-    + imagini + caption + figure
+    Extrage text + păstrează ordinea imaginilor + stiluri inline
     """
 
     for tag in tags:
@@ -73,9 +88,7 @@ def _get_text(root, tags):
 
 def _get_bibliography(root, tags):
     """
-    Extrage bibliografia corect:
-    - păstrează referințele pe linii separate
-    - funcționează cu InDesign XML (<p>, <br>, etc.)
+    Bibliografie + stiluri inline (fără imagini aici de obicei)
     """
 
     for tag in tags:
@@ -104,9 +117,7 @@ def _get_bibliography(root, tags):
                 refs.append(" ".join(raw).strip())
 
         if not refs:
-            refs = [
-                _convert_inline_styles(el).strip()
-            ]
+            refs = [_convert_inline_styles(el).strip()]
 
         refs = [r for r in refs if r]
         return "\n".join(refs)
