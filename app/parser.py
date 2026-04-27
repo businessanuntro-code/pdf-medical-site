@@ -13,7 +13,7 @@ def _clean_image_src(src: str) -> str:
     return IMAGE_BASE_URL + filename
 
 
-def _is_image_tag(tag: str) -> bool:
+def _is_image(tag: str) -> bool:
     if not tag:
         return False
     tag = tag.lower()
@@ -21,29 +21,21 @@ def _is_image_tag(tag: str) -> bool:
 
 
 # =========================
-# CONTINUT + ABSTRACT
+# PARCURGERE ROBUSTĂ (IMPORTANT FIX)
 # =========================
-def _convert_inline(node):
+def _convert_node(node):
     parts = []
 
-    if node.text:
+    # text înainte
+    if node.text and node.text.strip():
         parts.append(node.text)
 
     for child in node:
 
         tag = child.tag.lower() if isinstance(child.tag, str) else ""
-        child_text = _convert_inline(child)
 
-        if tag in ["italic", "i"]:
-            parts.append(f"<i>{child_text}</i>")
-
-        elif tag in ["bold", "b"]:
-            parts.append(f"<b>{child_text}</b>")
-
-        elif tag in ["underline", "u"]:
-            parts.append(f"<u>{child_text}</u>")
-
-        elif _is_image_tag(tag):
+        # IMAGINI
+        if _is_image(tag):
             src = child.attrib.get("href") or child.attrib.get("src")
             final_src = _clean_image_src(src)
 
@@ -51,7 +43,7 @@ def _convert_inline(node):
                 parts.append(f'<figure><img src="{final_src}"/></figure>')
 
         else:
-            parts.append(child_text)
+            parts.append(_convert_node(child))
 
         if child.tail:
             parts.append(child.tail)
@@ -60,7 +52,18 @@ def _convert_inline(node):
 
 
 # =========================
-# BIBLIOGRAFIE (SAFE MODE)
+# EXTRAGERE TEXT SAFE
+# =========================
+def _get_text(root, tags):
+    for tag in tags:
+        el = root.find(tag)
+        if el is not None:
+            return _convert_node(el).strip()
+    return ""
+
+
+# =========================
+# BIBLIOGRAFIE FIX REAL
 # =========================
 def _get_bibliography(root, tags):
     for tag in tags:
@@ -70,24 +73,17 @@ def _get_bibliography(root, tags):
 
         refs = []
 
-        # IMPORTANT: DOAR TEXT PLAIN
-        for item in el.iter():
-            if item.text and item.tag not in ["Bibliografie", "bibliografie"]:
-                line = item.text.strip()
-                if line:
-                    refs.append(line)
+        # ia TOATĂ structura text + liniile
+        text = _convert_node(el)
+
+        lines = [l.strip() for l in text.split("\n") if l.strip()]
+
+        for l in lines:
+            refs.append(l)
 
         if refs:
             return "\n".join(refs)
 
-    return ""
-
-
-def _get_text(root, tags):
-    for tag in tags:
-        el = root.find(tag)
-        if el is not None:
-            return _convert_inline(el).strip()
     return ""
 
 
