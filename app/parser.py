@@ -8,42 +8,51 @@ def _clean_image_src(src: str) -> str:
         return ""
 
     src = src.strip().replace("\\", "/")
+
     filename = src.split("/")[-1]
 
     return IMAGE_BASE_URL + filename
 
 
-def _is_image(tag: str) -> bool:
-    if not tag:
-        return False
-    tag = tag.lower()
-    return "image" in tag or "img" in tag
+def _extract_images(root):
+    """
+    🔥 FIX IMPORTANT:
+    extrage imagini DIN ORICE LOC din XML
+    """
+    images = []
+
+    for img in root.findall(".//image"):
+        src = img.attrib.get("href") or img.attrib.get("src")
+        final = _clean_image_src(src)
+        if final:
+            images.append(f'<figure><img src="{final}" /></figure>')
+
+    return "\n".join(images)
 
 
-# =========================
-# PARCURGERE ROBUSTĂ (IMPORTANT FIX)
-# =========================
-def _convert_node(node):
+def _convert_inline_styles(node):
     parts = []
 
-    # text înainte
-    if node.text and node.text.strip():
+    if node.text:
         parts.append(node.text)
 
     for child in node:
 
         tag = child.tag.lower() if isinstance(child.tag, str) else ""
+        child_text = _convert_inline_styles(child)
 
-        # IMAGINI
-        if _is_image(tag):
-            src = child.attrib.get("href") or child.attrib.get("src")
-            final_src = _clean_image_src(src)
+        if tag in ["italic", "i"]:
+            parts.append(f"<i>{child_text}</i>")
 
-            if final_src:
-                parts.append(f'<figure><img src="{final_src}"/></figure>')
+        elif tag in ["bold", "b"]:
+            parts.append(f"<b>{child_text}</b>")
 
+        elif tag in ["underline", "u"]:
+            parts.append(f"<u>{child_text}</u>")
+
+        # ❌ nu mai procesăm imagine aici (IMPORTANT)
         else:
-            parts.append(_convert_node(child))
+            parts.append(child_text)
 
         if child.tail:
             parts.append(child.tail)
@@ -51,20 +60,14 @@ def _convert_node(node):
     return "".join(parts)
 
 
-# =========================
-# EXTRAGERE TEXT SAFE
-# =========================
 def _get_text(root, tags):
     for tag in tags:
         el = root.find(tag)
         if el is not None:
-            return _convert_node(el).strip()
+            return _convert_inline_styles(el).strip()
     return ""
 
 
-# =========================
-# BIBLIOGRAFIE FIX REAL
-# =========================
 def _get_bibliography(root, tags):
     for tag in tags:
         el = root.find(tag)
@@ -72,17 +75,15 @@ def _get_bibliography(root, tags):
             continue
 
         refs = []
+        paragraphs = el.findall(".//p")
 
-        # ia TOATĂ structura text + liniile
-        text = _convert_node(el)
+        if paragraphs:
+            for p in paragraphs:
+                refs.append(_convert_inline_styles(p).strip())
+        else:
+            refs.append(_convert_inline_styles(el).strip())
 
-        lines = [l.strip() for l in text.split("\n") if l.strip()]
-
-        for l in lines:
-            refs.append(l)
-
-        if refs:
-            return "\n".join(refs)
+        return "\n".join([r for r in refs if r])
 
     return ""
 
@@ -92,14 +93,17 @@ def parse_xml(path):
     root = tree.getroot()
 
     return {
-        "titlu_ro": _get_text(root, ["titlu_ro", "TitluRo", "TITLU_RO"]),
-        "titlu_en": _get_text(root, ["titlu_en", "TitluEn", "TITLU_EN"]),
-        "autori": _get_text(root, ["autori", "Autori", "AUTORI"]),
+        "titlu_ro": _get_text(root, ["titlu_ro", "TitluRo"]),
+        "titlu_en": _get_text(root, ["titlu_en", "TitluEn"]),
+        "autori": _get_text(root, ["autori", "Autori"]),
 
-        "abstract_keywords": _get_text(root, ["abstract_keywords", "AbstractKeywords"]),
-        "rezumat_cuvinte_cheie": _get_text(root, ["rezumat_cuvinte_cheie", "RezumatCuvinteCheie"]),
+        "abstract_keywords": _get_text(root, ["abstract_keywords", "abstract"]),
+        "rezumat_cuvinte_cheie": _get_text(root, ["rezumat_cuvinte_cheie", "rezumat"]),
 
-        "continut_articol": _get_text(root, ["continut_articol", "ContinutArticol", "body", "content"]),
+        "continut_articol": _get_text(root, ["continut_articol", "body", "content"]),
 
-        "bibliografie": _get_bibliography(root, ["bibliografie", "Bibliografie"]),
+        "bibliografie": _get_bibliography(root, ["bibliografie"]),
+
+        # 🔥 NOU: imagini separate
+        "imagini": _extract_images(root)
     }
