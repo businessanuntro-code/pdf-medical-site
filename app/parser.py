@@ -1,17 +1,14 @@
 from lxml import etree
 
 # =========================
-# CONFIG IMAGINI (IMPORTANT)
+# CONFIG IMAGINI
 # =========================
 IMAGE_BASE_URL = "https://raw.githubusercontent.com/businessanuntro-code/pdf-medical-site/main/uploads/"
 
 
 def _clean_image_src(src: str) -> str:
     """
-    Transformă:
-    file:///C:/.../tabel1.jpg
-    sau orice path în:
-    URL final GitHub raw
+    Extrage numele fișierului și îl transformă în URL final.
     """
 
     if not src:
@@ -19,15 +16,21 @@ def _clean_image_src(src: str) -> str:
 
     src = src.strip().replace("\\", "/")
 
-    # ia doar numele fișierului
+    # ia doar filename
     filename = src.split("/")[-1]
 
     return IMAGE_BASE_URL + filename
 
 
-def _convert_inline_styles(node):
+# =========================
+# 🔥 FIX PRINCIPAL: PARCURGERE COMPLETĂ XML
+# =========================
+def _convert_full_node(node):
     """
-    XML → HTML inline + imagini în ordinea corectă
+    Transformă XML → HTML păstrând:
+    - text
+    - bold / italic / underline
+    - imagini în ordinea corectă
     """
 
     parts = []
@@ -39,22 +42,21 @@ def _convert_inline_styles(node):
     for child in node:
 
         tag = child.tag.lower() if isinstance(child.tag, str) else ""
-        child_text = _convert_inline_styles(child)
 
         # -------------------------
-        # STILURI TEXT
+        # TEXT STYLES
         # -------------------------
         if tag in ["italic", "i"]:
-            parts.append(f"<i>{child_text}</i>")
+            parts.append(f"<i>{_convert_full_node(child)}</i>")
 
         elif tag in ["bold", "b"]:
-            parts.append(f"<b>{child_text}</b>")
+            parts.append(f"<b>{_convert_full_node(child)}</b>")
 
         elif tag in ["underline", "u"]:
-            parts.append(f"<u>{child_text}</u>")
+            parts.append(f"<u>{_convert_full_node(child)}</u>")
 
         # -------------------------
-        # IMAGINI (FIX PRINCIPAL)
+        # IMAGINI (FIX FINAL)
         # -------------------------
         elif tag in ["image", "img"]:
 
@@ -62,102 +64,56 @@ def _convert_inline_styles(node):
             final_src = _clean_image_src(src)
 
             if final_src:
-                parts.append(f'<img src="{final_src}" style="max-width:100%;height:auto;" />')
+                parts.append(f"""
+<figure>
+    <img src="{final_src}" style="max-width:100%;height:auto;" />
+</figure>
+""")
 
+        # -------------------------
+        # TABLE (passthrough brut XML → HTML simplu)
+        # -------------------------
+        elif tag in ["table", "tabel"]:
+            parts.append(etree.tostring(child, encoding="unicode"))
+
+        # -------------------------
         # fallback
+        # -------------------------
         else:
-            parts.append(child_text)
+            parts.append(_convert_full_node(child))
 
+        # tail text
         if child.tail:
             parts.append(child.tail)
 
     return "".join(parts)
 
 
-def _get_text(root, tags):
-    """
-    Text + inline styles + imagini
-    """
-    for tag in tags:
-        el = root.find(tag)
-        if el is not None:
-            text = _convert_inline_styles(el).strip()
-            if text:
-                return text
-    return ""
-
-
-def _get_bibliography(root, tags):
-    """
-    Bibliografie safe (fără imagini de obicei)
-    """
-    for tag in tags:
-        el = root.find(tag)
-        if el is None:
-            continue
-
-        refs = []
-
-        paragraphs = el.findall(".//p")
-        if paragraphs:
-            for p in paragraphs:
-                text = _convert_inline_styles(p).strip()
-                if text:
-                    refs.append(text)
-        else:
-            raw = []
-            for node in el.iter():
-                if node.tag == "br":
-                    refs.append(" ".join(raw).strip())
-                    raw = []
-                elif node.text:
-                    raw.append(node.text)
-
-            if raw:
-                refs.append(" ".join(raw).strip())
-
-        if not refs:
-            refs = [_convert_inline_styles(el).strip()]
-
-        refs = [r for r in refs if r]
-        return "\n".join(refs)
-
-    return ""
-
-
 def parse_xml(path):
     tree = etree.parse(path)
     root = tree.getroot()
 
+    # =========================
+    # META CAMPURI
+    # =========================
     data = {
-        "titlu_ro": _get_text(root, ["TitluRo", "TITLU_RO", "titlu_ro", "titlu"]),
-        "titlu_en": _get_text(root, ["TitluEn", "TITLU_EN", "titlu_en"]),
-        "autori": _get_text(root, ["Autori", "AUTORI", "autori"]),
+        "titlu_ro": root.findtext("titlu_ro", ""),
+        "titlu_en": root.findtext("titlu_en", ""),
+        "autori": root.findtext("autori", ""),
 
-        "abstract_keywords": _get_text(root, [
-            "AbstractKeywords",
-            "abstract_keywords",
-            "abstract"
-        ]),
-
-        "rezumat_cuvinte_cheie": _get_text(root, [
-            "RezumatCuvinteCheie",
-            "rezumat_cuvinte_cheie",
-            "rezumat"
-        ]),
-
-        # 🔥 AICI SE AFLĂ FIXUL PENTRU IMAGINI
-        "continut_articol": _get_text(root, [
-            "ContinutArticol",
-            "continut_articol",
-            "body",
-            "content"
-        ]),
-
-        "bibliografie": _get_bibliography(root, [
-            "Bibliografie",
-            "bibliografie"
-        ]),
+        "abstract_keywords": root.findtext("abstract_keywords", ""),
+        "rezumat_cuvinte_cheie": root.findtext("rezumat_cuvinte_cheie", ""),
+        "bibliografie": root.findtext("bibliografie", ""),
     }
+
+    # =========================
+    # 🔥 FIX IMPORTANT: CONTINUT COMPLET XML (nu _get_text)
+    # =========================
+    continut_node = root.find("continut_articol")
+
+    if continut_node is not None:
+        data["continut_articol"] = _convert_full_node(continut_node)
+    else:
+        data["continut_articol"] = ""
 
     return data
