@@ -49,79 +49,70 @@ def superscript_symbols(text):
 
 
 # =========================
-# IMAGE EXTRACTION (FIX FINAL)
-# =========================
-def extract_images(text):
-    """
-    Extrage imagini din XML brut (păstrat de parser)
-    """
-    if not text:
-        return ""
-
-    html = ""
-
-    # 🔥 detectează <imagine1 href="..."/>
-    matches = re.findall(
-        r'<imagine\d+\s+href=["\']([^"\']+)["\']\s*/?>',
-        text,
-        flags=re.IGNORECASE
-    )
-
-    for img in matches:
-        filename = img.split("/")[-1]
-
-        # GitHub RAW fallback (fix stabil)
-        url = f"https://raw.githubusercontent.com/businessanuntro-code/pdf-medical-site/main/uploads/{filename}"
-
-        html += f'<img src="{url}" style="max-width:100%; margin:15px 0;" />'
-
-    return html
-
-
-# =========================
-# CONTENT FORMATTER
+# CONTENT FORMATTER (🔥 FINAL FIX - POSITIONAL IMAGES)
 # =========================
 def format_content(text):
 
     if not text:
         return ""
 
-    # normalize InDesign line breaks
     text = text.replace("\u2029", "\n")
 
-    # 🔥 EXTRACT IMAGES BEFORE CLEANING
-    images_html = extract_images(text)
-
-    # remove image tags from visible text
-    text = re.sub(r'<imagine\d+\s+href=["\'][^"\']+["\']\s*/?>', '', text)
-
-    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    # 🔥 SPLIT KEEPING IMAGE TAGS IN PLACE
+    parts = re.split(
+        r'(<imagine\d+\s+href=["\'][^"\']+["\']\s*/?>)',
+        text,
+        flags=re.IGNORECASE
+    )
 
     html = []
 
-    for i, line in enumerate(lines):
+    for part in parts:
 
-        processed = linkify(line)
-        processed = superscript_refs(processed)
-        processed = superscript_symbols(processed)
+        # =========================
+        # IMAGE NODE (KEEP POSITION)
+        # =========================
+        if re.match(r'<imagine\d+', part, re.IGNORECASE):
 
-        # remove HTML tags for word count check
-        clean = re.sub(r'<[^>]+>', '', processed)
-        word_count = len(clean.split())
+            match = re.search(r'href=["\']([^"\']+)["\']', part)
 
-        next_is_long = False
-        if i + 1 < len(lines):
-            if len(lines[i + 1].split()) > 8:
-                next_is_long = True
+            if match:
+                img = match.group(1)
+                filename = img.split("/")[-1]
 
-        if 1 <= word_count <= 5 and next_is_long:
-            processed = f"<strong>{processed}</strong>"
+                url = f"https://raw.githubusercontent.com/businessanuntro-code/pdf-medical-site/main/uploads/{filename}"
 
-        html.append(f"<p>{processed}</p>")
+                html.append(
+                    f'<figure style="margin:15px 0; text-align:center;">'
+                    f'<img src="{url}" style="max-width:100%; height:auto;">'
+                    f'</figure>'
+                )
 
-    # 🔥 append images at end of content
-    if images_html:
-        html.append(images_html)
+            continue
+
+        # =========================
+        # TEXT NODE
+        # =========================
+        lines = [line.strip() for line in part.splitlines() if line.strip()]
+
+        for i, line in enumerate(lines):
+
+            processed = linkify(line)
+            processed = superscript_refs(processed)
+            processed = superscript_symbols(processed)
+
+            clean = re.sub(r'<[^>]+>', '', processed)
+            word_count = len(clean.split())
+
+            next_is_long = False
+            if i + 1 < len(lines):
+                if len(lines[i + 1].split()) > 8:
+                    next_is_long = True
+
+            if 1 <= word_count <= 5 and next_is_long:
+                processed = f"<strong>{processed}</strong>"
+
+            html.append(f"<p>{processed}</p>")
 
     return "\n".join(html)
 
@@ -200,7 +191,9 @@ def build_html(data):
         img {{
             max-width: 100%;
             height: auto;
-            display: block;
+        }}
+        figure {{
+            margin: 15px 0;
         }}
         ol {{
             padding-left: 20px;
