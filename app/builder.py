@@ -4,7 +4,6 @@ import re
 # =========================
 # LINKIFY
 # =========================
-
 def linkify(text):
     if not text:
         return ""
@@ -20,9 +19,8 @@ def linkify(text):
 
 
 # =========================
-# SUPERSCRIPT REFS
+# SUPERSCRIPT REFERENCES
 # =========================
-
 def superscript_refs(text):
     if not text:
         return ""
@@ -41,7 +39,6 @@ def superscript_refs(text):
 # =========================
 # SUPERSCRIPT SYMBOLS
 # =========================
-
 def superscript_symbols(text):
     if not text:
         return ""
@@ -54,82 +51,49 @@ def superscript_symbols(text):
 # =========================
 # IMAGE EXTRACTION (FIX FINAL)
 # =========================
-
 def extract_images(text):
     """
-    Extrage imagini din orice poziție din XML:
-    - inline <imagine1 href="..."/>
-    - img src=""
+    Extrage imagini din XML brut (păstrat de parser)
     """
-
     if not text:
         return ""
 
-    images_html = ""
+    html = ""
 
-    # 🔥 <imagine1 href="..."/>
-    matches = re.findall(r'<imagine\d+\s+href="([^"]+)"\s*/?>', text)
-
-    for img in matches:
-        img = normalize_image(img)
-        images_html += f'<img src="{img}" style="max-width:100%; margin:10px 0;" />'
-
-    # 🔥 <img src="...">
-    matches2 = re.findall(r'<img[^>]+src="([^"]+)"', text)
-
-    for img in matches2:
-        img = normalize_image(img)
-        images_html += f'<img src="{img}" style="max-width:100%; margin:10px 0;" />'
-
-    # 🔥 direct image URLs
-    matches3 = re.findall(
-        r'(https?://[^\s]+\.(?:png|jpg|jpeg|gif|webp))',
+    # 🔥 detectează <imagine1 href="..."/>
+    matches = re.findall(
+        r'<imagine\d+\s+href=["\']([^"\']+)["\']\s*/?>',
         text,
-        flags=re.I
+        flags=re.IGNORECASE
     )
 
-    for img in matches3:
-        images_html += f'<img src="{img}" style="max-width:100%; margin:10px 0;" />'
+    for img in matches:
+        filename = img.split("/")[-1]
 
-    return images_html
+        # GitHub RAW fallback (fix stabil)
+        url = f"https://raw.githubusercontent.com/businessanuntro-code/pdf-medical-site/main/uploads/{filename}"
 
+        html += f'<img src="{url}" style="max-width:100%; margin:15px 0;" />'
 
-# =========================
-# IMAGE NORMALIZER (GITHUB RAW FIX)
-# =========================
-
-def normalize_image(img):
-    """
-    Convertește orice path în GitHub RAW URL stabil
-    """
-
-    if not img:
-        return ""
-
-    img = img.replace("file:///", "")
-    img = img.replace("\\", "/")
-
-    filename = img.split("/")[-1]
-
-    return f"https://raw.githubusercontent.com/businessanuntro-code/pdf-medical-site/main/uploads/{filename}"
+    return html
 
 
 # =========================
-# CONTENT FORMATTER (FIX IMPORTANT)
+# CONTENT FORMATTER
 # =========================
-
 def format_content(text):
 
     if not text:
         return ""
 
+    # normalize InDesign line breaks
     text = text.replace("\u2029", "\n")
 
-    # 🔥 EXTRACT IMAGES GLOBALLY (IMPORTANT FIX)
-    global_images = extract_images(text)
+    # 🔥 EXTRACT IMAGES BEFORE CLEANING
+    images_html = extract_images(text)
 
-    # eliminăm tag-urile de imagine din text
-    text = re.sub(r'<imagine\d+\s+href="[^"]+"\s*/?>', '', text)
+    # remove image tags from visible text
+    text = re.sub(r'<imagine\d+\s+href=["\'][^"\']+["\']\s*/?>', '', text)
 
     lines = [line.strip() for line in text.splitlines() if line.strip()]
 
@@ -141,9 +105,9 @@ def format_content(text):
         processed = superscript_refs(processed)
         processed = superscript_symbols(processed)
 
-        clean_text = re.sub(r'<[^>]+>', '', processed)
-        words = clean_text.split()
-        word_count = len(words)
+        # remove HTML tags for word count check
+        clean = re.sub(r'<[^>]+>', '', processed)
+        word_count = len(clean.split())
 
         next_is_long = False
         if i + 1 < len(lines):
@@ -155,9 +119,9 @@ def format_content(text):
 
         html.append(f"<p>{processed}</p>")
 
-    # 🔥 adăugăm imaginile la final
-    if global_images:
-        html.append(global_images)
+    # 🔥 append images at end of content
+    if images_html:
+        html.append(images_html)
 
     return "\n".join(html)
 
@@ -165,7 +129,6 @@ def format_content(text):
 # =========================
 # BIBLIOGRAPHY
 # =========================
-
 def format_bibliography(text):
     if not text:
         return ""
@@ -185,9 +148,8 @@ def format_bibliography(text):
 
 
 # =========================
-# MAIN BUILDER
+# BUILD HTML
 # =========================
-
 def build_html(data):
 
     continut = format_content(data.get('continut_articol', ''))
@@ -236,9 +198,9 @@ def build_html(data):
             text-align: justify;
         }}
         img {{
-            display: block;
             max-width: 100%;
             height: auto;
+            display: block;
         }}
         ol {{
             padding-left: 20px;
