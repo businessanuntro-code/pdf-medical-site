@@ -1,4 +1,5 @@
 import re
+import os
 
 
 # =========================
@@ -52,42 +53,56 @@ def superscript_symbols(text):
 
 
 # =========================
-# IMAGE HANDLER (FIXED)
+# IMAGE NORMALIZER (FIX CORE)
+# =========================
+
+def normalize_image(img):
+    """
+    Convertește orice tip de path în:
+    /static/filename
+    """
+
+    if not img:
+        return ""
+
+    # remove file:///
+    img = img.replace("file:///", "")
+    img = img.replace("\\", "/")
+
+    # keep only filename
+    filename = os.path.basename(img)
+
+    return f"/static/{filename}"
+
+
+# =========================
+# IMAGE HANDLER
 # =========================
 
 def extract_images(line):
-    """
-    Suport:
-    - <imagine1 href="file:///...">
-    - <img src="...">
-    - URL imagini web
-    """
 
     images_html = ""
 
     # -------------------------
-    # 1. XML custom <imagineX href="">
+    # <imagine1 href="">
     # -------------------------
     matches = re.findall(r'<imagine\d+\s+href="([^"]+)"', line)
 
     for img in matches:
-
-        # transform file:///C:/... -> /static/...
-        clean = img.replace("file:///", "")
-        clean = clean.replace("\\", "/")
-
-        images_html += f'<img src="{clean}" style="max-width:100%; margin:10px 0;" />'
+        src = normalize_image(img)
+        images_html += f'<img src="{src}" style="max-width:100%; margin:10px 0;" />'
 
     # -------------------------
-    # 2. standard <img src="">
+    # <img src="">
     # -------------------------
     matches2 = re.findall(r'<img[^>]+src="([^"]+)"', line)
 
     for img in matches2:
-        images_html += f'<img src="{img}" style="max-width:100%; margin:10px 0;" />'
+        src = normalize_image(img)
+        images_html += f'<img src="{src}" style="max-width:100%; margin:10px 0;" />'
 
     # -------------------------
-    # 3. direct image URLs
+    # direct image URLs
     # -------------------------
     matches3 = re.findall(
         r'(https?://[^\s]+\.(?:png|jpg|jpeg|gif|webp))',
@@ -117,7 +132,7 @@ def format_content(text):
 
     for i, line in enumerate(lines):
 
-        # 🔥 IMAGINI SAFE (NU STRICĂ TEXTUL)
+        # IMAGES (SAFE)
         images_html = extract_images(line)
 
         # TEXT PROCESSING
@@ -125,25 +140,25 @@ def format_content(text):
         processed = superscript_refs(processed)
         processed = superscript_symbols(processed)
 
-        # clean text pentru word count
+        # word count (clean HTML)
         clean_text = re.sub(r'<[^>]+>', '', processed)
         words = clean_text.split()
         word_count = len(words)
 
-        # detect next paragraph size
+        # next paragraph check
         next_is_long = False
         if i + 1 < len(lines):
             next_words = lines[i + 1].split()
             if len(next_words) > 8:
                 next_is_long = True
 
-        # bold logic (1–5 words)
+        # bold rule (1–5 words)
         if 1 <= word_count <= 5 and next_is_long:
             processed = f"<strong>{processed}</strong>"
 
         html.append(f"<p>{processed}</p>")
 
-        # imagini după paragraf
+        # images after paragraph
         if images_html:
             html.append(images_html)
 
@@ -151,7 +166,7 @@ def format_content(text):
 
 
 # =========================
-# BIBLIOGRAFIE
+# BIBLIOGRAPHY
 # =========================
 
 def format_bibliography(text):
