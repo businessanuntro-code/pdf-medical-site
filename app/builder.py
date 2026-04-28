@@ -52,31 +52,57 @@ def superscript_symbols(text):
 
 
 # =========================
-# IMAGE DETECTION (SAFE FIX)
+# IMAGE HANDLER (FIXED)
 # =========================
 
 def extract_images(line):
     """
-    Extrage imagini fără să strice textul
+    Suport:
+    - <imagine1 href="file:///...">
+    - <img src="...">
+    - URL imagini web
     """
 
     images_html = ""
 
-    # URL imagini directe
-    matches = re.findall(
+    # -------------------------
+    # 1. XML custom <imagineX href="">
+    # -------------------------
+    matches = re.findall(r'<imagine\d+\s+href="([^"]+)"', line)
+
+    for img in matches:
+
+        # transform file:///C:/... -> /static/...
+        clean = img.replace("file:///", "")
+        clean = clean.replace("\\", "/")
+
+        images_html += f'<img src="{clean}" style="max-width:100%; margin:10px 0;" />'
+
+    # -------------------------
+    # 2. standard <img src="">
+    # -------------------------
+    matches2 = re.findall(r'<img[^>]+src="([^"]+)"', line)
+
+    for img in matches2:
+        images_html += f'<img src="{img}" style="max-width:100%; margin:10px 0;" />'
+
+    # -------------------------
+    # 3. direct image URLs
+    # -------------------------
+    matches3 = re.findall(
         r'(https?://[^\s]+\.(?:png|jpg|jpeg|gif|webp))',
         line,
         flags=re.I
     )
 
-    for img in matches:
+    for img in matches3:
         images_html += f'<img src="{img}" style="max-width:100%; margin:10px 0;" />'
 
     return images_html
 
 
 # =========================
-# CONTENT FORMAT (FIXED)
+# CONTENT FORMAT
 # =========================
 
 def format_content(text):
@@ -91,19 +117,20 @@ def format_content(text):
 
     for i, line in enumerate(lines):
 
-        # 🔥 IMAGINI SEPARAT (NU STRICĂ TEXTUL)
+        # 🔥 IMAGINI SAFE (NU STRICĂ TEXTUL)
         images_html = extract_images(line)
 
-        # procesare text
+        # TEXT PROCESSING
         processed = linkify(line)
         processed = superscript_refs(processed)
         processed = superscript_symbols(processed)
 
-        # remove HTML for word counting
+        # clean text pentru word count
         clean_text = re.sub(r'<[^>]+>', '', processed)
         words = clean_text.split()
         word_count = len(words)
 
+        # detect next paragraph size
         next_is_long = False
         if i + 1 < len(lines):
             next_words = lines[i + 1].split()
@@ -116,7 +143,7 @@ def format_content(text):
 
         html.append(f"<p>{processed}</p>")
 
-        # imagini după paragraf (SAFE)
+        # imagini după paragraf
         if images_html:
             html.append(images_html)
 
@@ -124,7 +151,7 @@ def format_content(text):
 
 
 # =========================
-# BIBLIOGRAFIE (UNCHANGED except no superscript)
+# BIBLIOGRAFIE
 # =========================
 
 def format_bibliography(text):
@@ -146,7 +173,7 @@ def format_bibliography(text):
 
 
 # =========================
-# MAIN HTML BUILDER
+# MAIN BUILDER
 # =========================
 
 def build_html(data):
