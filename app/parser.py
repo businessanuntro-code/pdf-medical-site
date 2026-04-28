@@ -1,15 +1,23 @@
 from lxml import etree
 
 
+# =========================
+# SAFE TEXT EXTRACTOR
+# =========================
+
 def _get_text(root, tags):
     for tag in tags:
-        el = root.find(".//" + tag)  # 🔥 FIX IMPORTANT
+        el = root.find(".//" + tag)  # 🔥 important fix (deep search)
         if el is not None:
             text = " ".join(el.itertext()).strip()
             if text:
                 return text
     return ""
 
+
+# =========================
+# BIBLIOGRAPHY
+# =========================
 
 def _get_bibliography(root, tags):
     for tag in tags:
@@ -37,6 +45,10 @@ def _get_bibliography(root, tags):
     return ""
 
 
+# =========================
+# XML PARSER MAIN
+# =========================
+
 def parse_xml(path):
     tree = etree.parse(path)
     root = tree.getroot()
@@ -48,29 +60,27 @@ def parse_xml(path):
 
         "abstract_keywords": _get_text(root, [
             "AbstractKeywords",
-            "Abstract-Keywords",
             "abstract_keywords",
             "abstract"
         ]),
 
         "rezumat_cuvinte_cheie": _get_text(root, [
             "RezumatCuvinteCheie",
-            "Rezumat-Cuvinte-Cheie",
             "rezumat_cuvinte_cheie",
             "rezumat"
         ]),
 
+        # 🔥 FIX IMPORTANT: continut robust
         "continut_articol": _get_text(root, [
             "ContinutArticol",
-            "Continut-articol",
             "continut_articol",
             "continut",
-            "body"
+            "body",
+            "Content",
         ]),
 
         "bibliografie": _get_bibliography(root, [
             "Bibliografie",
-            "BIBLIOGRAFIE",
             "bibliografie"
         ]),
     }
