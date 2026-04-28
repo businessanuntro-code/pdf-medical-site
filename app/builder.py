@@ -49,31 +49,22 @@ def superscript_symbols(text):
 
 
 # =========================
-# IMAGE (POSITIONAL + HOVER EFFECT)
+# IMAGE RENDER (MEDICAL STYLE FIX)
 # =========================
 def render_image(img_url):
 
     return f"""
-    <div style="margin:15px 0; text-align:left;">
+    <figure class="img-figure">
         <img
             src="{img_url}"
-            style="
-                width:145px;
-                height:100px;
-                object-fit:cover;
-                transition: all 0.25s ease;
-                cursor:zoom-in;
-                border-radius:6px;
-            "
-            onmouseover="this.style.width='800px'; this.style.height='550px';"
-            onmouseout="this.style.width='145px'; this.style.height='100px';"
+            class="article-image"
         />
-    </div>
+    </figure>
     """
 
 
 # =========================
-# CONTENT FORMATTER (POSITION PRESERVED)
+# CONTENT FORMATTER (POSITIONAL IMAGES)
 # =========================
 def format_content(text):
 
@@ -140,6 +131,7 @@ def format_content(text):
 # BIBLIOGRAPHY
 # =========================
 def format_bibliography(text):
+
     if not text:
         return ""
 
@@ -213,8 +205,30 @@ p {{
     text-align: justify;
 }}
 
-img {{
+/* =========================
+   IMAGE MEDICAL STYLE (MEDICHUB LIKE)
+   ========================= */
+.img-figure {{
+    margin: 15px 0;
+    text-align: left;
+}}
+
+.article-image {{
+    width: 145px;
+    height: auto;
+    object-fit: contain;
+    cursor: zoom-in;
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
     display: block;
+    border-radius: 4px;
+}}
+
+.article-image:hover {{
+    transform: scale(4);
+    transform-origin: left top;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+    z-index: 9999;
+    position: relative;
 }}
 
 ol {{
