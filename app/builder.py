@@ -52,13 +52,55 @@ def superscript_symbols(text):
 
 
 # =========================
-# 🔥 IMAGE FIX (GITHUB RAW SAFE)
+# IMAGE EXTRACTION (FIX FINAL)
+# =========================
+
+def extract_images(text):
+    """
+    Extrage imagini din orice poziție din XML:
+    - inline <imagine1 href="..."/>
+    - img src=""
+    """
+
+    if not text:
+        return ""
+
+    images_html = ""
+
+    # 🔥 <imagine1 href="..."/>
+    matches = re.findall(r'<imagine\d+\s+href="([^"]+)"\s*/?>', text)
+
+    for img in matches:
+        img = normalize_image(img)
+        images_html += f'<img src="{img}" style="max-width:100%; margin:10px 0;" />'
+
+    # 🔥 <img src="...">
+    matches2 = re.findall(r'<img[^>]+src="([^"]+)"', text)
+
+    for img in matches2:
+        img = normalize_image(img)
+        images_html += f'<img src="{img}" style="max-width:100%; margin:10px 0;" />'
+
+    # 🔥 direct image URLs
+    matches3 = re.findall(
+        r'(https?://[^\s]+\.(?:png|jpg|jpeg|gif|webp))',
+        text,
+        flags=re.I
+    )
+
+    for img in matches3:
+        images_html += f'<img src="{img}" style="max-width:100%; margin:10px 0;" />'
+
+    return images_html
+
+
+# =========================
+# IMAGE NORMALIZER (GITHUB RAW FIX)
 # =========================
 
 def normalize_image(img):
     """
-    Transformă orice path (file, local, etc.)
-    în GitHub RAW URL stabil
+    Convertește orice path în GitHub RAW URL stabil
     """
 
     if not img:
@@ -73,42 +115,7 @@ def normalize_image(img):
 
 
 # =========================
-# IMAGE EXTRACTOR
-# =========================
-
-def extract_images(line):
-
-    images_html = ""
-
-    # <imagine1 href="">
-    matches = re.findall(r'<imagine\d+\s+href="([^"]+)"', line)
-
-    for img in matches:
-        src = normalize_image(img)
-        images_html += f'<img src="{src}" style="max-width:100%; margin:10px 0;" />'
-
-    # <img src="">
-    matches2 = re.findall(r'<img[^>]+src="([^"]+)"', line)
-
-    for img in matches2:
-        src = normalize_image(img)
-        images_html += f'<img src="{src}" style="max-width:100%; margin:10px 0;" />'
-
-    # direct web images
-    matches3 = re.findall(
-        r'(https?://[^\s]+\.(?:png|jpg|jpeg|gif|webp))',
-        line,
-        flags=re.I
-    )
-
-    for img in matches3:
-        images_html += f'<img src="{img}" style="max-width:100%; margin:10px 0;" />'
-
-    return images_html
-
-
-# =========================
-# CONTENT FORMATTER
+# CONTENT FORMATTER (FIX IMPORTANT)
 # =========================
 
 def format_content(text):
@@ -117,13 +124,18 @@ def format_content(text):
         return ""
 
     text = text.replace("\u2029", "\n")
+
+    # 🔥 EXTRACT IMAGES GLOBALLY (IMPORTANT FIX)
+    global_images = extract_images(text)
+
+    # eliminăm tag-urile de imagine din text
+    text = re.sub(r'<imagine\d+\s+href="[^"]+"\s*/?>', '', text)
+
     lines = [line.strip() for line in text.splitlines() if line.strip()]
 
     html = []
 
     for i, line in enumerate(lines):
-
-        images_html = extract_images(line)
 
         processed = linkify(line)
         processed = superscript_refs(processed)
@@ -143,8 +155,9 @@ def format_content(text):
 
         html.append(f"<p>{processed}</p>")
 
-        if images_html:
-            html.append(images_html)
+    # 🔥 adăugăm imaginile la final
+    if global_images:
+        html.append(global_images)
 
     return "\n".join(html)
 
