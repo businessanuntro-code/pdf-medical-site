@@ -9,11 +9,7 @@ def linkify(text):
 
     def replace(match):
         url = match.group(0)
-
-        href = url
-        if url.startswith("www"):
-            href = "https://" + url
-
+        href = url if not url.startswith("www") else "https://" + url
         return f'<a href="{href}" target="_blank">{url}</a>'
 
     return re.sub(url_pattern, replace, text)
@@ -35,24 +31,65 @@ def superscript_refs(text):
 
 
 def superscript_symbols(text):
-    """
-    Transformă ™ și ® în superscript
-    """
     if not text:
         return ""
 
     text = text.replace("™", "<sup>™</sup>")
     text = text.replace("®", "<sup>®</sup>")
+    return text
+
+
+# =========================
+# IMAGES HANDLING
+# =========================
+
+def extract_and_replace_images(text):
+    """
+    Detectează imagini și le transformă în <img>
+    """
+
+    if not text:
+        return ""
+
+    image_urls = []
+
+    # 1. <img src="...">
+    def img_tag_replace(match):
+        src = match.group(1)
+        image_urls.append(src)
+        return f'<img src="{src}" style="max-width:100%; margin:10px 0;" />'
+
+    text = re.sub(r'<img[^>]+src="([^"]+)"[^>]*>', img_tag_replace, text, flags=re.I)
+
+    # 2. <image src="...">
+    def image_tag_replace(match):
+        src = match.group(1)
+        image_urls.append(src)
+        return f'<img src="{src}" style="max-width:100%; margin:10px 0;" />'
+
+    text = re.sub(r'<image[^>]+src="([^"]+)"[^>]*>', image_tag_replace, text, flags=re.I)
+
+    # 3. URL imagini directe
+    def url_image_replace(match):
+        url = match.group(0)
+        image_urls.append(url)
+        return f'<img src="{url}" style="max-width:100%; margin:10px 0;" />'
+
+    text = re.sub(
+        r'(https?://[^\s]+\.(?:png|jpg|jpeg|gif|webp))',
+        url_image_replace,
+        text,
+        flags=re.I
+    )
 
     return text
 
 
+# =========================
+# CONTENT FORMAT
+# =========================
+
 def format_content(text):
-    """
-    - separă după \u2029 (InDesign)
-    - paragraf 1–5 cuvinte + urmat de paragraf lung → bold
-    - aplică linkuri, superscript refs și simboluri
-    """
 
     if not text:
         return ""
@@ -64,11 +101,14 @@ def format_content(text):
 
     for i, line in enumerate(lines):
 
+        # 🔥 imagini înainte de procesare text
+        line = extract_and_replace_images(line)
+
         processed = linkify(line)
         processed = superscript_refs(processed)
-        processed = superscript_symbols(processed)  # 🔥 NOU
+        processed = superscript_symbols(processed)
 
-        words = line.split()
+        words = re.sub(r'<[^>]+>', '', line).split()
         word_count = len(words)
 
         next_is_long = False
@@ -84,6 +124,10 @@ def format_content(text):
 
     return "\n".join(html)
 
+
+# =========================
+# BIBLIOGRAFIE
+# =========================
 
 def format_bibliography(text):
     if not text:
@@ -103,10 +147,13 @@ def format_bibliography(text):
     return html
 
 
+# =========================
+# MAIN BUILDER
+# =========================
+
 def build_html(data):
 
-    continut = data.get('continut_articol', '')
-    continut = format_content(continut)
+    continut = format_content(data.get('continut_articol', ''))
 
     abstract = data.get('abstract_keywords', '')
     abstract = linkify(abstract)
@@ -126,6 +173,7 @@ def build_html(data):
 <head>
     <meta charset="utf-8">
     <title>{data.get('titlu_ro', 'Articol')}</title>
+
     <style>
         body {{
             font-family: Arial, sans-serif;
@@ -150,6 +198,11 @@ def build_html(data):
             margin: 0 0 10px 0;
             text-align: justify;
         }}
+        img {{
+            display: block;
+            max-width: 100%;
+            height: auto;
+        }}
         ol {{
             padding-left: 20px;
         }}
@@ -162,6 +215,7 @@ def build_html(data):
         }}
     </style>
 </head>
+
 <body>
 
     <h1>{data.get('titlu_ro', '')}</h1>
