@@ -4,6 +4,7 @@ import uuid
 from fastapi import FastAPI, UploadFile, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles  # 🔥 IMPORTANT FIX
 
 from app.parser import parse_xml
 from app.builder import build_html
@@ -17,6 +18,12 @@ OUTPUT_DIR = "outputs"
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+
+# =========================
+# 🔥 STATIC FILES (IMAGES FIX)
+# =========================
+app.mount("/static", StaticFiles(directory="uploads"), name="static")
 
 
 # ---------------- HOME PAGE ----------------
@@ -53,7 +60,7 @@ async def upload(file: UploadFile):
     with open(html_path, "w", encoding="utf-8") as f:
         f.write(html)
 
-    # 5. REDIRECT direct către articol (IMPORTANT)
+    # 5. redirect către articol
     return RedirectResponse(
         url=f"/article/{file_id}",
         status_code=302
