@@ -11,7 +11,6 @@ def _convert_inline_styles(node):
 
     parts = []
 
-    # text înainte de copii
     if node.text:
         parts.append(node.text)
 
@@ -39,12 +38,56 @@ def _convert_inline_styles(node):
     return "".join(parts)
 
 
-def _get_text(root, tags):
+# 🔥 NOU — CONTENT CU IMAGINI
+def _get_content_with_images(root, tags):
     """
-    Extrage text + păstrează stiluri inline (italic/bold/underline)
-    fără să strice compatibilitatea existentă.
+    Extrage conținutul articolului păstrând:
+    - text formatat
+    - poziția imaginilor
     """
 
+    for tag in tags:
+        el = root.find(tag)
+        if el is None:
+            continue
+
+        html_parts = []
+
+        for node in el:
+
+            tag_name = node.tag.lower() if isinstance(node.tag, str) else ""
+
+            # TEXT PARAGRAF
+            if tag_name in ["p", "paragraph"]:
+                text = _convert_inline_styles(node).strip()
+                if text:
+                    html_parts.append(text)
+
+            # 🔥 IMAGINE
+            elif tag_name in ["image", "img"]:
+
+                src = node.get("href") or node.get("src")
+
+                if src:
+                    # ia doar numele fișierului (fără path)
+                    filename = src.split("/")[-1]
+
+                    html_parts.append(
+                        f'<img src="/uploads/{filename}" class="article-image" />'
+                    )
+
+            # fallback (în caz că InDesign exportă altfel)
+            else:
+                text = _convert_inline_styles(node).strip()
+                if text:
+                    html_parts.append(text)
+
+        return "\n".join(html_parts)
+
+    return ""
+
+
+def _get_text(root, tags):
     for tag in tags:
         el = root.find(tag)
         if el is not None:
@@ -55,11 +98,6 @@ def _get_text(root, tags):
 
 
 def _get_bibliography(root, tags):
-    """
-    Extrage bibliografia corect:
-    - păstrează referințele pe linii separate
-    - funcționează cu InDesign XML (<p>, <br>, etc.)
-    """
     for tag in tags:
         el = root.find(tag)
         if el is None:
@@ -119,7 +157,8 @@ def parse_xml(path):
             "rezumat"
         ]),
 
-        "continut_articol": _get_text(root, [
+        # 🔥 AICI FOLOSIM NOUA FUNCȚIE
+        "continut_articol": _get_content_with_images(root, [
             "ContinutArticol",
             "Continut-articol",
             "continut_articol",
