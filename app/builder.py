@@ -49,7 +49,31 @@ def superscript_symbols(text):
 
 
 # =========================
-# CONTENT FORMATTER (🔥 FINAL FIX - POSITIONAL IMAGES)
+# IMAGE (POSITIONAL + HOVER EFFECT)
+# =========================
+def render_image(img_url):
+
+    return f"""
+    <div style="margin:15px 0; text-align:left;">
+        <img
+            src="{img_url}"
+            style="
+                width:145px;
+                height:100px;
+                object-fit:cover;
+                transition: all 0.25s ease;
+                cursor:zoom-in;
+                border-radius:6px;
+            "
+            onmouseover="this.style.width='800px'; this.style.height='550px';"
+            onmouseout="this.style.width='145px'; this.style.height='100px';"
+        />
+    </div>
+    """
+
+
+# =========================
+# CONTENT FORMATTER (POSITION PRESERVED)
 # =========================
 def format_content(text):
 
@@ -58,7 +82,6 @@ def format_content(text):
 
     text = text.replace("\u2029", "\n")
 
-    # 🔥 SPLIT KEEPING IMAGE TAGS IN PLACE
     parts = re.split(
         r'(<imagine\d+\s+href=["\'][^"\']+["\']\s*/?>)',
         text,
@@ -70,7 +93,7 @@ def format_content(text):
     for part in parts:
 
         # =========================
-        # IMAGE NODE (KEEP POSITION)
+        # IMAGE NODE
         # =========================
         if re.match(r'<imagine\d+', part, re.IGNORECASE):
 
@@ -82,11 +105,7 @@ def format_content(text):
 
                 url = f"https://raw.githubusercontent.com/businessanuntro-code/pdf-medical-site/main/uploads/{filename}"
 
-                html.append(
-                    f'<figure style="margin:15px 0; text-align:center;">'
-                    f'<img src="{url}" style="max-width:100%; height:auto;">'
-                    f'</figure>'
-                )
+                html.append(render_image(url))
 
             continue
 
@@ -161,85 +180,90 @@ def build_html(data):
 <!DOCTYPE html>
 <html lang="ro">
 <head>
-    <meta charset="utf-8">
-    <title>{data.get('titlu_ro', 'Articol')}</title>
+<meta charset="utf-8">
+<title>{data.get('titlu_ro', 'Articol')}</title>
 
-    <style>
-        body {{
-            font-family: Arial, sans-serif;
-            margin: 40px;
-            line-height: 1.6;
-        }}
-        h1 {{
-            font-size: 28px;
-        }}
-        h2 {{
-            margin-top: 30px;
-            color: #222;
-        }}
-        .meta {{
-            color: #555;
-            margin-bottom: 20px;
-        }}
-        .section {{
-            margin-bottom: 25px;
-        }}
-        p {{
-            margin: 0 0 10px 0;
-            text-align: justify;
-        }}
-        img {{
-            max-width: 100%;
-            height: auto;
-        }}
-        figure {{
-            margin: 15px 0;
-        }}
-        ol {{
-            padding-left: 20px;
-        }}
-        li {{
-            margin-bottom: 12px;
-        }}
-        sup {{
-            font-size: 0.75em;
-            vertical-align: super;
-        }}
-    </style>
+<style>
+body {{
+    font-family: Arial, sans-serif;
+    margin: 40px;
+    line-height: 1.6;
+}}
+
+h1 {{
+    font-size: 28px;
+}}
+
+h2 {{
+    margin-top: 30px;
+    color: #222;
+}}
+
+.meta {{
+    color: #555;
+    margin-bottom: 20px;
+}}
+
+.section {{
+    margin-bottom: 25px;
+}}
+
+p {{
+    margin: 0 0 10px 0;
+    text-align: justify;
+}}
+
+img {{
+    display: block;
+}}
+
+ol {{
+    padding-left: 20px;
+}}
+
+li {{
+    margin-bottom: 12px;
+}}
+
+sup {{
+    font-size: 0.75em;
+    vertical-align: super;
+}}
+</style>
 </head>
 
 <body>
 
-    <h1>{data.get('titlu_ro', '')}</h1>
-    <h2>{data.get('titlu_en', '')}</h2>
+<h1>{data.get('titlu_ro', '')}</h1>
+<h2>{data.get('titlu_en', '')}</h2>
 
-    <div class="meta">
-        <b>Autori:</b> {data.get('autori', '')}
+<div class="meta">
+    <b>Autori:</b> {data.get('autori', '')}
+</div>
+
+<hr>
+
+<div class="section">
+    <h2>Abstract & Keywords</h2>
+    <p>{abstract}</p>
+</div>
+
+<div class="section">
+    <h2>Rezumat și Cuvinte Cheie</h2>
+    <p>{rezumat}</p>
+</div>
+
+<div class="section">
+    <h2>Conținut articol</h2>
+    <div>
+        {continut}
     </div>
+</div>
 
-    <hr>
-
-    <div class="section">
-        <h2>Abstract & Keywords</h2>
-        <p>{abstract}</p>
-    </div>
-
-    <div class="section">
-        <h2>Rezumat și Cuvinte Cheie</h2>
-        <p>{rezumat}</p>
-    </div>
-
-    <div class="section">
-        <h2>Conținut articol</h2>
-        <div>
-            {continut}
-        </div>
-    </div>
-
-    <div class="section">
-        <h2>Bibliografie</h2>
-        {format_bibliography(data.get('bibliografie', ''))}
-    </div>
+<div class="section">
+    <h2>Bibliografie</h2>
+    {format_bibliography(data.get('bibliografie', ''))}
+</div>
 
 </body>
 </html>
