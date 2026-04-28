@@ -1,6 +1,10 @@
 import re
 
 
+# =========================
+# LINKS
+# =========================
+
 def linkify(text):
     if not text:
         return ""
@@ -14,6 +18,10 @@ def linkify(text):
 
     return re.sub(url_pattern, replace, text)
 
+
+# =========================
+# SUPERSCRIPT REFERENCES
+# =========================
 
 def superscript_refs(text):
     if not text:
@@ -30,6 +38,10 @@ def superscript_refs(text):
     return re.sub(pattern, replace, text)
 
 
+# =========================
+# SUPERSCRIPT SYMBOLS
+# =========================
+
 def superscript_symbols(text):
     if not text:
         return ""
@@ -40,53 +52,31 @@ def superscript_symbols(text):
 
 
 # =========================
-# IMAGES HANDLING
+# IMAGE DETECTION (SAFE FIX)
 # =========================
 
-def extract_and_replace_images(text):
+def extract_images(line):
     """
-    Detectează imagini și le transformă în <img>
+    Extrage imagini fără să strice textul
     """
 
-    if not text:
-        return ""
+    images_html = ""
 
-    image_urls = []
-
-    # 1. <img src="...">
-    def img_tag_replace(match):
-        src = match.group(1)
-        image_urls.append(src)
-        return f'<img src="{src}" style="max-width:100%; margin:10px 0;" />'
-
-    text = re.sub(r'<img[^>]+src="([^"]+)"[^>]*>', img_tag_replace, text, flags=re.I)
-
-    # 2. <image src="...">
-    def image_tag_replace(match):
-        src = match.group(1)
-        image_urls.append(src)
-        return f'<img src="{src}" style="max-width:100%; margin:10px 0;" />'
-
-    text = re.sub(r'<image[^>]+src="([^"]+)"[^>]*>', image_tag_replace, text, flags=re.I)
-
-    # 3. URL imagini directe
-    def url_image_replace(match):
-        url = match.group(0)
-        image_urls.append(url)
-        return f'<img src="{url}" style="max-width:100%; margin:10px 0;" />'
-
-    text = re.sub(
+    # URL imagini directe
+    matches = re.findall(
         r'(https?://[^\s]+\.(?:png|jpg|jpeg|gif|webp))',
-        url_image_replace,
-        text,
+        line,
         flags=re.I
     )
 
-    return text
+    for img in matches:
+        images_html += f'<img src="{img}" style="max-width:100%; margin:10px 0;" />'
+
+    return images_html
 
 
 # =========================
-# CONTENT FORMAT
+# CONTENT FORMAT (FIXED)
 # =========================
 
 def format_content(text):
@@ -101,14 +91,17 @@ def format_content(text):
 
     for i, line in enumerate(lines):
 
-        # 🔥 imagini înainte de procesare text
-        line = extract_and_replace_images(line)
+        # 🔥 IMAGINI SEPARAT (NU STRICĂ TEXTUL)
+        images_html = extract_images(line)
 
+        # procesare text
         processed = linkify(line)
         processed = superscript_refs(processed)
         processed = superscript_symbols(processed)
 
-        words = re.sub(r'<[^>]+>', '', line).split()
+        # remove HTML for word counting
+        clean_text = re.sub(r'<[^>]+>', '', processed)
+        words = clean_text.split()
         word_count = len(words)
 
         next_is_long = False
@@ -117,16 +110,21 @@ def format_content(text):
             if len(next_words) > 8:
                 next_is_long = True
 
+        # bold logic (1–5 words)
         if 1 <= word_count <= 5 and next_is_long:
-            html.append(f"<p><b>{processed}</b></p>")
-        else:
-            html.append(f"<p>{processed}</p>")
+            processed = f"<strong>{processed}</strong>"
+
+        html.append(f"<p>{processed}</p>")
+
+        # imagini după paragraf (SAFE)
+        if images_html:
+            html.append(images_html)
 
     return "\n".join(html)
 
 
 # =========================
-# BIBLIOGRAFIE
+# BIBLIOGRAFIE (UNCHANGED except no superscript)
 # =========================
 
 def format_bibliography(text):
@@ -148,7 +146,7 @@ def format_bibliography(text):
 
 
 # =========================
-# MAIN BUILDER
+# MAIN HTML BUILDER
 # =========================
 
 def build_html(data):
